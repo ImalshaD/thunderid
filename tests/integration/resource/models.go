@@ -20,12 +20,27 @@ package resource
 
 // ResourceServerResponse represents a resource server response.
 type ResourceServerResponse struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Identifier  string `json:"identifier,omitempty"`
-	OUID        string `json:"ouId"`
-	Delimiter   string `json:"delimiter"`
+	ID          string                            `json:"id"`
+	Name        string                            `json:"name"`
+	Description string                            `json:"description,omitempty"`
+	OUID        string                            `json:"ouId"`
+	Delimiter   string                            `json:"delimiter"`
+	Interfaces  []ResourceServerInterfaceResponse `json:"interfaces"`
+	IsReadOnly  bool                              `json:"isReadOnly"`
+}
+
+// ResourceServerInterfaceResponse represents an interface of a resource server.
+type ResourceServerInterfaceResponse struct {
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Identifier string `json:"identifier"`
+	IsReadOnly bool   `json:"isReadOnly"`
+}
+
+// ResourceServerInterfaceListResponse represents the response for listing interfaces.
+type ResourceServerInterfaceListResponse struct {
+	TotalResults int                               `json:"totalResults"`
+	Interfaces   []ResourceServerInterfaceResponse `json:"interfaces"`
 }
 
 // ResourceResponse represents a resource response.
@@ -95,21 +110,28 @@ type ResourcePermissionListResponse struct {
 	Permissions      []string `json:"permissions"`
 }
 
-// CreateResourceServerRequest represents the request to create a resource server.
+// CreateResourceServerRequest represents the request to create a resource server. The initial
+// interface is created in the same operation.
 type CreateResourceServerRequest struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description,omitempty"`
-	Identifier  string  `json:"identifier,omitempty"`
-	OUID        string  `json:"ouId"`
-	Delimiter   *string `json:"delimiter,omitempty"`
+	Name        string                         `json:"name"`
+	Description string                         `json:"description,omitempty"`
+	OUID        string                         `json:"ouId"`
+	Delimiter   *string                        `json:"delimiter,omitempty"`
+	Interface   ResourceServerInterfaceRequest `json:"interface"`
 }
 
-// UpdateResourceServerRequest represents the request to update a resource server.
+// UpdateResourceServerRequest represents the request to update a resource server. Interfaces are
+// managed through the nested interface endpoints.
 type UpdateResourceServerRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	Identifier  string `json:"identifier,omitempty"`
 	OUID        string `json:"ouId"`
+}
+
+// ResourceServerInterfaceRequest represents the request to create or update an interface.
+type ResourceServerInterfaceRequest struct {
+	Type       string `json:"type"`
+	Identifier string `json:"identifier"`
 }
 
 // CreateResourceRequest represents the request to create a resource.

@@ -191,7 +191,7 @@ func (ts *RefreshTokenTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "Refresh Token Resource Server",
 		Description: "Resource server for refresh token integration tests",
-		Identifier:  refreshTokenTestResource,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: refreshTokenTestResource},
 		OUID:        ts.ouID,
 	}, []testutils.Action{})
 	ts.Require().NoError(err, "Failed to create refresh token resource server")

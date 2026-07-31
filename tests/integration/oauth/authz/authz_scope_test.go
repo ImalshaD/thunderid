@@ -247,7 +247,7 @@ func (ts *OAuthAuthzScopeTestSuite) SetupSuite() {
 	resourceServer := testutils.ResourceServer{
 		Name:        "OAuth Document Management System",
 		Description: "System for managing documents via OAuth",
-		Identifier:  scopeTestResourceServerIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: scopeTestResourceServerIdentifier},
 		OUID:        scopeTestOUID,
 	}
 	actions := []testutils.Action{
@@ -273,7 +273,7 @@ func (ts *OAuthAuthzScopeTestSuite) SetupSuite() {
 	resourceServerB := testutils.ResourceServer{
 		Name:        "OAuth Document Management System B",
 		Description: "A different system that happens to define the same permission strings",
-		Identifier:  scopeTestResourceServerBIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: scopeTestResourceServerBIdentifier},
 		OUID:        scopeTestOUID,
 	}
 	scopeTestResourceServerB, err = testutils.CreateResourceServerWithActions(resourceServerB, actions)

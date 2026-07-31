@@ -26,7 +26,8 @@ type Subject struct {
 }
 
 // Resource identifies the protected resource in an AuthZEN access evaluation request.
-// Type is the ThunderID resource server identifier. ID is reserved for future instance-based authorization.
+// Type is a ThunderID resource server interface identifier. ID is reserved for future
+// instance-based authorization.
 type Resource struct {
 	Type       string                 `json:"type"`
 	ID         string                 `json:"id"`

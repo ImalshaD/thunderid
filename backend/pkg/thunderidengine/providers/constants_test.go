@@ -100,10 +100,10 @@ func (suite *ConstantsTestSuite) TestEntityState_String() {
 	assert.Equal(suite.T(), "ACTIVE", EntityStateActive.String())
 }
 
-func (suite *ConstantsTestSuite) TestResourceServerType_IsValid() {
-	assert.True(suite.T(), ResourceServerTypeAPI.IsValid())
-	assert.True(suite.T(), ResourceServerTypeMCP.IsValid())
-	assert.True(suite.T(), ResourceServerTypeCustom.IsValid())
-	assert.False(suite.T(), ResourceServerType("UNKNOWN").IsValid())
-	assert.False(suite.T(), ResourceServerType("").IsValid())
+func (suite *ConstantsTestSuite) TestResourceServerInterfaceType_IsValid() {
+	assert.True(suite.T(), ResourceServerInterfaceTypeAPI.IsValid())
+	assert.True(suite.T(), ResourceServerInterfaceTypeMCP.IsValid())
+	assert.False(suite.T(), ResourceServerInterfaceType("CUSTOM").IsValid())
+	assert.False(suite.T(), ResourceServerInterfaceType("UNKNOWN").IsValid())
+	assert.False(suite.T(), ResourceServerInterfaceType("").IsValid())
 }

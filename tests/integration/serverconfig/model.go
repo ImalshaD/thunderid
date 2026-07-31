@@ -29,9 +29,10 @@ const (
 	serverConfigURL = testServerURL + "/server-config"
 	corsConfigURL   = serverConfigURL + "/cors"
 
-	defaultResourceServerConfigURL = serverConfigURL + "/defaultResourceServer"
+	defaultResourceServerInterfaceConfigURL = serverConfigURL + "/defaultResourceServerInterface"
 
-	systemResourceServerID = "01900000-0000-7000-8000-000000000020"
+	// The System resource server's API interface, seeded by the bootstrap defaults.
+	systemResourceServerInterfaceID = "01900000-0000-7000-8000-000000000022"
 
 	// sampleOrigin / otherOrigin are valid origins used to exercise the writable layer's read/write and
 	// replace round-trips. The only registered config consumer is CORS, so stored values must be valid
@@ -71,12 +72,12 @@ type serverConfigLayers struct {
 	Merged   corsSectionValue `json:"merged"`
 }
 
-type defaultResourceServerValue struct {
-	ResourceServerID string `json:"resourceServerId"`
+type defaultResourceServerInterfaceValue struct {
+	ResourceServerInterfaceID string `json:"resourceServerInterfaceId"`
 }
 
-type defaultResourceServerLayers struct {
-	ReadOnly defaultResourceServerValue `json:"readOnly"`
-	Writable defaultResourceServerValue `json:"writable"`
-	Merged   defaultResourceServerValue `json:"merged"`
+type defaultResourceServerInterfaceLayers struct {
+	ReadOnly defaultResourceServerInterfaceValue `json:"readOnly"`
+	Writable defaultResourceServerInterfaceValue `json:"writable"`
+	Merged   defaultResourceServerInterfaceValue `json:"merged"`
 }

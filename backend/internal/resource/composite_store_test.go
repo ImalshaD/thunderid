@@ -413,22 +413,22 @@ func (s *CompositeResourceStoreTestSuite) TestCheckResourceServerNameExists_NotF
 	s.dbStoreMock.AssertExpectations(s.T())
 }
 
-func (s *CompositeResourceStoreTestSuite) TestCheckResourceServerIdentifierExists_ExistsInFile() {
-	s.fileStoreMock.On("CheckResourceServerIdentifierExists", s.ctx, "test-id").Return(true, nil)
+func (s *CompositeResourceStoreTestSuite) TestCheckResourceServerInterfaceIdentifierExists_ExistsInFile() {
+	s.fileStoreMock.On("CheckResourceServerInterfaceIdentifierExists", s.ctx, "test-id").Return(true, nil)
 
-	exists, err := s.compositeStore.CheckResourceServerIdentifierExists(s.ctx, "test-id")
+	exists, err := s.compositeStore.CheckResourceServerInterfaceIdentifierExists(s.ctx, "test-id")
 
 	assert.NoError(s.T(), err)
 	assert.True(s.T(), exists)
 	s.fileStoreMock.AssertExpectations(s.T())
-	s.dbStoreMock.AssertNotCalled(s.T(), "CheckResourceServerIdentifierExists")
+	s.dbStoreMock.AssertNotCalled(s.T(), "CheckResourceServerInterfaceIdentifierExists")
 }
 
-func (s *CompositeResourceStoreTestSuite) TestCheckResourceServerIdentifierExists_ExistsInDB() {
-	s.fileStoreMock.On("CheckResourceServerIdentifierExists", s.ctx, "test-id").Return(false, nil)
-	s.dbStoreMock.On("CheckResourceServerIdentifierExists", s.ctx, "test-id").Return(true, nil)
+func (s *CompositeResourceStoreTestSuite) TestCheckResourceServerInterfaceIdentifierExists_ExistsInDB() {
+	s.fileStoreMock.On("CheckResourceServerInterfaceIdentifierExists", s.ctx, "test-id").Return(false, nil)
+	s.dbStoreMock.On("CheckResourceServerInterfaceIdentifierExists", s.ctx, "test-id").Return(true, nil)
 
-	exists, err := s.compositeStore.CheckResourceServerIdentifierExists(s.ctx, "test-id")
+	exists, err := s.compositeStore.CheckResourceServerInterfaceIdentifierExists(s.ctx, "test-id")
 
 	assert.NoError(s.T(), err)
 	assert.True(s.T(), exists)
@@ -436,16 +436,16 @@ func (s *CompositeResourceStoreTestSuite) TestCheckResourceServerIdentifierExist
 	s.dbStoreMock.AssertExpectations(s.T())
 }
 
-func (s *CompositeResourceStoreTestSuite) TestCheckResourceServerIdentifierExists_FileError() {
+func (s *CompositeResourceStoreTestSuite) TestCheckResourceServerInterfaceIdentifierExists_FileError() {
 	fileErr := errors.New("file store error")
-	s.fileStoreMock.On("CheckResourceServerIdentifierExists", s.ctx, "test-id").Return(false, fileErr)
+	s.fileStoreMock.On("CheckResourceServerInterfaceIdentifierExists", s.ctx, "test-id").Return(false, fileErr)
 
-	exists, err := s.compositeStore.CheckResourceServerIdentifierExists(s.ctx, "test-id")
+	exists, err := s.compositeStore.CheckResourceServerInterfaceIdentifierExists(s.ctx, "test-id")
 
 	assert.Error(s.T(), err)
 	assert.False(s.T(), exists)
 	s.fileStoreMock.AssertExpectations(s.T())
-	s.dbStoreMock.AssertNotCalled(s.T(), "CheckResourceServerIdentifierExists")
+	s.dbStoreMock.AssertNotCalled(s.T(), "CheckResourceServerInterfaceIdentifierExists")
 }
 
 func (s *CompositeResourceStoreTestSuite) TestCheckResourceServerHasDependencies_OnlyChecksDB() {

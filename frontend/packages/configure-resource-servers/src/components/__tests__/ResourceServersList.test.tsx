@@ -16,14 +16,16 @@
  * under the License.
  */
 
+import * as thunderIdReactModule from '@thunderid/react';
 import {renderWithProviders, screen} from '@thunderid/test-utils';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import type {DefaultResourceServerConfigResponse, ResourceServerListResponse} from '../../models/resource-server';
 import ResourceServersList from '../ResourceServersList';
 
-vi.mock('@thunderid/react', () => ({
-  useThunderID: () => ({http: {request: vi.fn()}}),
-}));
+vi.mock('@thunderid/react', {spy: true});
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- vi.mock({spy:true}) type inference doesn't resolve for this package's conditional exports
+vi.mocked(thunderIdReactModule.useThunderID).mockImplementation(() => ({http: {request: vi.fn()}}) as never);
 
 vi.mock('@thunderid/contexts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@thunderid/contexts')>();
@@ -47,6 +49,10 @@ vi.mock('react-router', async (importOriginal) => {
 });
 
 vi.mock('../ResourceServerDeleteDialog', () => ({
+  default: () => null,
+}));
+
+vi.mock('../DefaultResourceServerCard', () => ({
   default: () => null,
 }));
 
@@ -75,18 +81,16 @@ const twoRowsResponse: ResourceServerListResponse = {
     {
       id: 'rs-1',
       name: 'Payments API',
-      identifier: 'https://api.example.com',
       ouId: 'ou-1',
       delimiter: ':',
-      type: 'API',
+      interfaces: [{id: 'rsi-1', type: 'API', identifier: 'https://api.example.com'}],
     },
     {
       id: 'rs-2',
       name: 'System MCP',
-      identifier: 'https://mcp.example.com',
       ouId: 'ou-1',
       delimiter: '/',
-      type: 'MCP',
+      interfaces: [{id: 'rsi-2', type: 'MCP', identifier: 'https://mcp.example.com'}],
       isReadOnly: true,
     },
   ],
@@ -101,20 +105,15 @@ describe('ResourceServersList', () => {
       error: null,
     });
     mockUseGetDefaultResourceServer.mockReturnValue({
-      data: {readOnly: {}, writable: {}, merged: {resourceServerId: 'rs-1'}},
+      data: {readOnly: {}, writable: {}, merged: {resourceServerInterfaceId: 'rsi-1'}},
     });
   });
 
-  it('renders the type chip label for a normal row', () => {
+  it('does not show the derived type in the listing', () => {
     renderWithProviders(<ResourceServersList />);
 
-    expect(screen.getByText('API')).toBeInTheDocument();
-  });
-
-  it('renders the type chip label for a read-only row', () => {
-    renderWithProviders(<ResourceServersList />);
-
-    expect(screen.getByText('MCP')).toBeInTheDocument();
+    expect(screen.queryByText('API')).not.toBeInTheDocument();
+    expect(screen.queryByText('MCP')).not.toBeInTheDocument();
   });
 
   it('shows Edit and Delete buttons for a normal row', () => {
@@ -137,10 +136,11 @@ describe('ResourceServersList', () => {
     expect(deleteButtons).toHaveLength(1);
   });
 
-  it('shows a Default badge on the current default row', () => {
+  it('does not list the interfaces of each row', () => {
     renderWithProviders(<ResourceServersList />);
 
-    expect(screen.getByText('Default')).toBeInTheDocument();
+    expect(screen.queryByText('API · https://api.example.com')).not.toBeInTheDocument();
+    expect(screen.queryByText('MCP · https://mcp.example.com')).not.toBeInTheDocument();
   });
 
   it('does not show a Default badge when no default is set', () => {

@@ -101,7 +101,7 @@ A successful response returns a <ProductName />-issued access token:
 }
 ```
 
-The issued token's `sub` claim contains the external user's subject identifier from the original token. For permission-bearing requests, its `aud` claim is the explicit resource server identifier or the configured `defaultResourceServer`. An OIDC-only or scopeless request without `resource` uses the application's default audience (`token.accessToken.defaultAudience`), or the `client_id` when it is unset.
+The issued token's `sub` claim contains the external user's subject identifier from the original token. For permission-bearing requests, its `aud` claim is the explicit resource server interface identifier or the identifier of the configured default resource server interface. An OIDC-only or scopeless request without `resource` uses the application's default audience (`token.accessToken.defaultAudience`), or the `client_id` when it is unset.
 
 ## How <ProductName /> Validates the External Token
 

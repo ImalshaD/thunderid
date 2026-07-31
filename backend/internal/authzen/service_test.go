@@ -77,7 +77,7 @@ func (s *ServiceTestSuite) mockValidAction(permission string) {
 
 func (s *ServiceTestSuite) mockResourceServerIdentifier(identifier string) {
 	s.resourceMock.On("GetResourceServerByIdentifier", mock.Anything, identifier).
-		Return(&providers.ResourceServer{ID: testResourceServerID, Identifier: identifier}, nil).Once()
+		Return(resolvedResourceServer(testResourceServerID, identifier), nil).Once()
 }
 
 func (s *ServiceTestSuite) TestEvaluateAccessAllowed() {
@@ -969,4 +969,14 @@ func (s *ServiceTestSuite) assertErrorContextWithMessage(context map[string]inte
 	s.True(ok)
 	s.Equal(message, errorContext["message"])
 	s.NotContains(errorContext, "status")
+}
+
+func resolvedResourceServer(id, identifier string) *providers.ResourceServer {
+	return &providers.ResourceServer{
+		ID: id,
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: identifier,
+		}},
+	}
 }

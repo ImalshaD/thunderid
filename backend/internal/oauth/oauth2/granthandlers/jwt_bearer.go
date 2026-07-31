@@ -178,7 +178,7 @@ func (h *jwtBearerGrantHandler) HandleGrant(ctx context.Context, tokenRequest *m
 		grantedScopes = make([]string, 0, len(oidcScopes)+len(permissionScopes))
 		grantedScopes = append(grantedScopes, oidcScopes...)
 		grantedScopes = append(grantedScopes, permissionScopes...)
-		audiences = []string{targetRS.Identifier}
+		audiences = []string{resourceindicators.SelectedAudience(targetRS)}
 	}
 
 	// The subject is the external IdP's identifier carried in the assertion; no local user resolution

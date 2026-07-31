@@ -68,10 +68,7 @@ func (suite *JWTBearerGrantHandlerTestSuite) SetupTest() {
 	// A request that resolves no explicit resource (empty identifier) falls back to the deployment
 	// default RS, as the default-aware provider does.
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, "").
-		Return(&providers.ResourceServer{
-			ID:         testJWTBearerDefaultRSID,
-			Identifier: testJWTBearerDefaultRSAudience,
-		}, nil).Maybe()
+		Return(resolvedResourceServer(testJWTBearerDefaultRSID, testJWTBearerDefaultRSAudience), nil).Maybe()
 	suite.handler = &jwtBearerGrantHandler{
 		tokenBuilder:    suite.mockTokenBuilder,
 		tokenValidator:  suite.mockTokenValidator,
@@ -404,7 +401,7 @@ func (suite *JWTBearerGrantHandlerTestSuite) TestHandleGrant_AssertionResource_A
 			Resources: []string{testRS01URI},
 		}, nil)
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, testRS01URI).
-		Return(&providers.ResourceServer{ID: testRS01URI, Identifier: testRS01URI}, nil)
+		Return(resolvedResourceServer(testRS01URI, testRS01URI), nil)
 	// RS defines only "read"; "write" is dropped by scope narrowing.
 	suite.mockResourceService.On("ValidatePermissions", mock.Anything, testRS01URI, []string{"read", "write"}).
 		Return([]string{"write"}, nil)
@@ -482,7 +479,7 @@ func (suite *JWTBearerGrantHandlerTestSuite) TestHandleGrant_RequestResourceNarr
 			Resources: []string{testRS01URI, testRS02URI},
 		}, nil)
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, testRS01URI).
-		Return(&providers.ResourceServer{ID: testRS01URI, Identifier: testRS01URI}, nil)
+		Return(resolvedResourceServer(testRS01URI, testRS01URI), nil)
 	suite.mockResourceService.On("ValidatePermissions", mock.Anything, testRS01URI, []string{"read", "write"}).
 		Return([]string{}, nil)
 	suite.mockTokenBuilder.On("BuildAccessToken", mock.Anything,

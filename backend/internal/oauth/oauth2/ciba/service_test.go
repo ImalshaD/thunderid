@@ -108,7 +108,7 @@ func (suite *CIBAServiceTestSuite) expectStoreAddSuccess() {
 // the configured default resolves to the given RS and its permissions validate as requested.
 func (suite *CIBAServiceTestSuite) expectDefaultResourceServer(rsID, identifier string) {
 	suite.mockResourceSvc.EXPECT().GetResourceServerByIdentifier(mock.Anything, "").
-		Return(&providers.ResourceServer{ID: rsID, Identifier: identifier}, nil)
+		Return(resolvedResourceServer(rsID, identifier), nil)
 	suite.mockResourceSvc.EXPECT().ValidatePermissions(mock.Anything, rsID, mock.Anything).
 		Return([]string{}, nil)
 }
@@ -285,7 +285,7 @@ func (suite *CIBAServiceTestSuite) TestInitiate_StripsStandardScopesFromRuntime(
 
 func (suite *CIBAServiceTestSuite) TestInitiate_ExplicitResourceBindsAndDownscopes() {
 	suite.mockResourceSvc.EXPECT().GetResourceServerByIdentifier(mock.Anything, "https://api.example.com").
-		Return(&providers.ResourceServer{ID: "rs-1", Identifier: "https://api.example.com"}, nil)
+		Return(resolvedResourceServer("rs-1", "https://api.example.com"), nil)
 	suite.mockResourceSvc.EXPECT().ValidatePermissions(mock.Anything, "rs-1", mock.Anything).
 		Return([]string{}, nil)
 	suite.expectFlowInitiateSuccess()
@@ -308,7 +308,7 @@ func (suite *CIBAServiceTestSuite) TestInitiate_ExplicitResourceBindsAndDownscop
 
 func (suite *CIBAServiceTestSuite) TestInitiate_SetsResourceServerIDInRuntimeData() {
 	suite.mockResourceSvc.EXPECT().GetResourceServerByIdentifier(mock.Anything, "https://api.example.com").
-		Return(&providers.ResourceServer{ID: "rs-1", Identifier: "https://api.example.com"}, nil)
+		Return(resolvedResourceServer("rs-1", "https://api.example.com"), nil)
 	suite.mockResourceSvc.EXPECT().ValidatePermissions(mock.Anything, "rs-1", mock.Anything).
 		Return([]string{}, nil)
 	suite.mockFlowExec.EXPECT().InitiateAndExecute(mock.Anything, mock.MatchedBy(
@@ -1165,4 +1165,14 @@ func (suite *CIBAServiceTestSuite) TestInitiate_WithIDTokenHint_ExpiredWithinThr
 // build a real actor provider but never exercise actor authentication.
 func noopAuthnMgr() *managermock.AuthnProviderManagerMock {
 	return &managermock.AuthnProviderManagerMock{}
+}
+
+func resolvedResourceServer(id, identifier string) *providers.ResourceServer {
+	return &providers.ResourceServer{
+		ID: id,
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: identifier,
+		}},
+	}
 }

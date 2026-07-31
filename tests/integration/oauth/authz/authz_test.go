@@ -210,7 +210,7 @@ func (ts *AuthzTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "Authz Default Resource Server",
 		Description: "Resource server for authorization code integration tests",
-		Identifier:  authzDefaultResourceServerIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: authzDefaultResourceServerIdentifier},
 		OUID:        testOUID,
 	}, []testutils.Action{})
 	ts.Require().NoError(err, "Failed to create resource server")
@@ -1017,9 +1017,9 @@ func (ts *AuthzTestSuite) TestAuthorizationCodeFlowWithResourceParameter() {
 
 	// Create a Resource Server with the matching identifier so the resource parameter is valid
 	rs := testutils.ResourceServer{
-		Name:       "MCP Resource Server",
-		Identifier: resourceURL,
-		OUID:       testOUID,
+		Name:      "MCP Resource Server",
+		Interface: testutils.ResourceServerInterface{Type: "API", Identifier: resourceURL},
+		OUID:      testOUID,
 	}
 	rsID, err := testutils.CreateResourceServerWithActions(rs, nil)
 	ts.NoError(err, "Failed to create resource server")

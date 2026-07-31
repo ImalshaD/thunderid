@@ -75,6 +75,26 @@ type ResourceServiceInterface interface {
 	) (*providers.ResourceServer, *tidcommon.ServiceError)
 	IsResourceServerDeclarative(id string) bool
 
+	// Resource Server Interface operations
+	CreateResourceServerInterface(
+		ctx context.Context, resourceServerID string, rsi providers.ResourceServerInterface,
+	) (*providers.ResourceServerInterface, *tidcommon.ServiceError)
+	GetResourceServerInterface(
+		ctx context.Context, resourceServerID, interfaceID string,
+	) (*providers.ResourceServerInterface, *tidcommon.ServiceError)
+	GetResourceServerInterfaceByID(
+		ctx context.Context, interfaceID string,
+	) (*providers.ResourceServerInterface, *tidcommon.ServiceError)
+	GetResourceServerInterfaceList(
+		ctx context.Context, resourceServerID string,
+	) ([]providers.ResourceServerInterface, *tidcommon.ServiceError)
+	UpdateResourceServerInterface(
+		ctx context.Context, resourceServerID, interfaceID string, rsi providers.ResourceServerInterface,
+	) (*providers.ResourceServerInterface, *tidcommon.ServiceError)
+	DeleteResourceServerInterface(
+		ctx context.Context, resourceServerID, interfaceID string,
+	) *tidcommon.ServiceError
+
 	// Resource operations
 	CreateResource(ctx context.Context, resourceServerID string, res providers.Resource) (
 		*providers.Resource, *tidcommon.ServiceError)
@@ -257,21 +277,19 @@ func (rs *resourceService) CreateResourceServer(
 		return nil, &ErrorNameConflict
 	}
 
-	// Check identifier uniqueness
-	identifierExists, err := rs.resourceStore.CheckResourceServerIdentifierExists(ctx, resourceServer.Identifier)
-	if err != nil {
-		rs.logger.Error(ctx, "Failed to check resource server identifier", log.Error(err))
-		return nil, &tidcommon.InternalServerError
-	}
-	if identifierExists {
-		rs.logger.Debug(ctx, "Resource server identifier already exists",
-			log.String("identifier", resourceServer.Identifier))
-		return nil, &ErrorIdentifierConflict
-	}
+	// Interfaces own the audience identifiers, each unique across the deployment.
+	seenIdentifiers := make(map[string]struct{}, len(resourceServer.Interfaces))
+	for _, rsi := range resourceServer.Interfaces {
+		if _, duplicate := seenIdentifiers[rsi.Identifier]; duplicate {
+			rs.logger.Debug(ctx, "Duplicate interface identifier in the request",
+				log.String("identifier", rsi.Identifier))
+			return nil, &ErrorIdentifierConflict
+		}
+		seenIdentifiers[rsi.Identifier] = struct{}{}
 
-	// Set default type if not provided
-	if resourceServer.Type == "" {
-		resourceServer.Type = providers.ResourceServerTypeCustom
+		if svcErr := rs.ensureInterfaceIdentifierAvailable(ctx, rsi.Identifier); svcErr != nil {
+			return nil, svcErr
+		}
 	}
 
 	// Set default delimiter if not provided
@@ -298,7 +316,28 @@ func (rs *resourceService) CreateResourceServer(
 		}
 	}
 
-	// Use transaction for write operation
+	// A supplied interface ID is honored so imported and bootstrapped interfaces keep stable IDs.
+	createdInterfaces := make([]providers.ResourceServerInterface, 0, len(resourceServer.Interfaces))
+	for _, rsi := range resourceServer.Interfaces {
+		interfaceID := rsi.ID
+		if interfaceID == "" {
+			var err error
+			interfaceID, err = utils.GenerateUUIDv7()
+			if err != nil {
+				rs.logger.Error(ctx, "Failed to generate UUID", log.Error(err))
+				return nil, &tidcommon.InternalServerError
+			}
+		}
+		createdInterfaces = append(createdInterfaces, providers.ResourceServerInterface{
+			ID:               interfaceID,
+			ResourceServerID: id,
+			Type:             rsi.Type,
+			Identifier:       rsi.Identifier,
+		})
+	}
+
+	// The resource server and any supplied interfaces are created atomically, preventing partially
+	// persisted interface declarations.
 	var createdRS *providers.ResourceServer
 	if err := rs.transactioner.Transact(ctx, func(txCtx context.Context) error {
 		if err := rs.resourceStore.CreateResourceServer(txCtx, id, resourceServer); err != nil {
@@ -306,14 +345,20 @@ func (rs *resourceService) CreateResourceServer(
 			return err
 		}
 
+		for _, rsi := range createdInterfaces {
+			if err := rs.resourceStore.CreateResourceServerInterface(txCtx, rsi); err != nil {
+				rs.logger.Error(ctx, "Failed to create resource server interface", log.Error(err))
+				return err
+			}
+		}
+
 		createdRS = &providers.ResourceServer{
 			ID:          id,
 			Name:        resourceServer.Name,
 			Description: resourceServer.Description,
-			Identifier:  resourceServer.Identifier,
-			Type:        resourceServer.Type,
 			OUID:        resourceServer.OUID,
 			Delimiter:   resourceServer.Delimiter,
+			Interfaces:  createdInterfaces,
 		}
 		return nil
 	}); err != nil {
@@ -345,7 +390,9 @@ func (rs *resourceService) GetResourceServer(
 	return &resourceServer, nil
 }
 
-// GetResourceServerByIdentifier retrieves a resource server by its identifier.
+// GetResourceServerByIdentifier retrieves the resource server owning the given interface identifier.
+// The returned interface list is narrowed to the matching interface. Callers authorize using the
+// owning resource server and use the matched interface identifier as the token audience.
 func (rs *resourceService) GetResourceServerByIdentifier(
 	ctx context.Context, identifier string,
 ) (*providers.ResourceServer, *tidcommon.ServiceError) {
@@ -364,7 +411,28 @@ func (rs *resourceService) GetResourceServerByIdentifier(
 		return nil, &tidcommon.InternalServerError
 	}
 
+	selected, found := findInterfaceByIdentifier(resourceServer.Interfaces, identifier)
+	if !found {
+		rs.logger.Error(ctx, "Resource server resolved by identifier does not own that interface",
+			log.String("identifier", identifier), log.String("resourceServerID", resourceServer.ID))
+		return nil, &tidcommon.InternalServerError
+	}
+	resourceServer.Interfaces = []providers.ResourceServerInterface{selected}
+
 	return &resourceServer, nil
+}
+
+// findInterfaceByIdentifier returns the interface carrying the given identifier.
+func findInterfaceByIdentifier(
+	interfaces []providers.ResourceServerInterface,
+	identifier string,
+) (providers.ResourceServerInterface, bool) {
+	for _, rsi := range interfaces {
+		if rsi.Identifier == identifier {
+			return rsi, true
+		}
+	}
+	return providers.ResourceServerInterface{}, false
 }
 
 // GetResourceServerList retrieves a paginated list of resource servers.
@@ -436,24 +504,8 @@ func (rs *resourceService) UpdateResourceServer(
 	// Delimiter is always preserved from the existing record
 	resourceServer.Delimiter = existingResServer.Delimiter
 
-	// Type is immutable and always preserved from the existing record
-	resourceServer.Type = existingResServer.Type
-
-	// Identifier: preserve existing if not provided; check uniqueness if changed
-	if resourceServer.Identifier == "" {
-		resourceServer.Identifier = existingResServer.Identifier
-	} else if resourceServer.Identifier != existingResServer.Identifier {
-		identifierExists, err := rs.resourceStore.CheckResourceServerIdentifierExists(ctx, resourceServer.Identifier)
-		if err != nil {
-			rs.logger.Error(ctx, "Failed to check resource server identifier", log.Error(err))
-			return nil, &tidcommon.InternalServerError
-		}
-		if identifierExists {
-			rs.logger.Debug(ctx, "Resource server identifier already exists",
-				log.String("identifier", resourceServer.Identifier))
-			return nil, &ErrorIdentifierConflict
-		}
-	}
+	// Interfaces are managed through the nested interface endpoints, never through this update
+	resourceServer.Interfaces = existingResServer.Interfaces
 
 	// Validate organization unit
 	_, svcErr := rs.ouService.GetOrganizationUnit(ctx, resourceServer.OUID)
@@ -487,10 +539,9 @@ func (rs *resourceService) UpdateResourceServer(
 			ID:          id,
 			Name:        resourceServer.Name,
 			Description: resourceServer.Description,
-			Identifier:  resourceServer.Identifier,
-			Type:        resourceServer.Type,
 			OUID:        resourceServer.OUID,
 			Delimiter:   resourceServer.Delimiter,
+			Interfaces:  resourceServer.Interfaces,
 		}
 		return nil
 	}); err != nil {
@@ -528,6 +579,20 @@ func (rs *resourceService) DeleteResourceServer(ctx context.Context, id string) 
 		return svcErr
 	}
 
+	// Deleting a resource server cascades its interfaces away, so anything referencing one of them
+	// blocks the deletion too.
+	interfaces, err := rs.resourceStore.ListResourceServerInterfaces(ctx, id)
+	if err != nil {
+		rs.logger.Error(ctx, "Failed to list resource server interfaces", log.Error(err))
+		return &tidcommon.InternalServerError
+	}
+	for _, rsi := range interfaces {
+		if svcErr := rs.ensureNoBlockingDependencies(
+			ctx, resourcedependency.ResourceTypeResourceServerInterface, rsi.ID); svcErr != nil {
+			return svcErr
+		}
+	}
+
 	// Use transaction for write operation
 	if err := rs.transactioner.Transact(ctx, func(txCtx context.Context) error {
 		if err := rs.resourceStore.DeleteResourceServer(txCtx, id); err != nil {
@@ -545,6 +610,242 @@ func (rs *resourceService) DeleteResourceServer(ctx context.Context, id string) 
 // IsResourceServerDeclarative checks if a resource server is declarative (immutable).
 func (rs *resourceService) IsResourceServerDeclarative(id string) bool {
 	return rs.resourceStore.IsResourceServerDeclarative(id)
+}
+
+// Resource Server Interface operations
+
+// CreateResourceServerInterface adds an interface to an existing resource server.
+func (rs *resourceService) CreateResourceServerInterface(
+	ctx context.Context,
+	resourceServerID string,
+	rsi providers.ResourceServerInterface,
+) (*providers.ResourceServerInterface, *tidcommon.ServiceError) {
+	if resourceServerID == "" {
+		return nil, &ErrorMissingID
+	}
+
+	if svcErr := validateInterface(rsi); svcErr != nil {
+		return nil, svcErr
+	}
+
+	if _, svcErr := rs.validateAndGetResourceServer(ctx, resourceServerID); svcErr != nil {
+		return nil, svcErr
+	}
+
+	if rs.IsResourceServerDeclarative(resourceServerID) {
+		rs.logger.Debug(ctx, "Cannot add an interface to a declarative resource server",
+			log.String("id", resourceServerID))
+		return nil, ErrorImmutableResourceServer.WithParams(map[string]string{"id": resourceServerID})
+	}
+
+	if svcErr := rs.ensureInterfaceIdentifierAvailable(ctx, rsi.Identifier); svcErr != nil {
+		return nil, svcErr
+	}
+
+	// A supplied ID is honored so imported and bootstrapped interfaces keep stable IDs, which the
+	// default-interface configuration references.
+	interfaceID := rsi.ID
+	if interfaceID == "" {
+		var err error
+		interfaceID, err = utils.GenerateUUIDv7()
+		if err != nil {
+			rs.logger.Error(ctx, "Failed to generate UUID", log.Error(err))
+			return nil, &tidcommon.InternalServerError
+		}
+	} else if _, svcErr := rs.GetResourceServerInterfaceByID(ctx, interfaceID); svcErr == nil {
+		rs.logger.Debug(ctx, "Resource server interface ID already exists", log.String("id", interfaceID))
+		return nil, &ErrorIdentifierConflict
+	}
+
+	created := providers.ResourceServerInterface{
+		ID:               interfaceID,
+		ResourceServerID: resourceServerID,
+		Type:             rsi.Type,
+		Identifier:       rsi.Identifier,
+	}
+
+	if err := rs.transactioner.Transact(ctx, func(txCtx context.Context) error {
+		return rs.resourceStore.CreateResourceServerInterface(txCtx, created)
+	}); err != nil {
+		rs.logger.Error(ctx, "Failed to create resource server interface", log.Error(err))
+		return nil, &tidcommon.InternalServerError
+	}
+
+	return &created, nil
+}
+
+// GetResourceServerInterface retrieves an interface of a resource server.
+func (rs *resourceService) GetResourceServerInterface(
+	ctx context.Context,
+	resourceServerID, interfaceID string,
+) (*providers.ResourceServerInterface, *tidcommon.ServiceError) {
+	if resourceServerID == "" || interfaceID == "" {
+		return nil, &ErrorMissingID
+	}
+
+	if _, svcErr := rs.validateAndGetResourceServer(ctx, resourceServerID); svcErr != nil {
+		return nil, svcErr
+	}
+
+	rsi, err := rs.resourceStore.GetResourceServerInterface(ctx, interfaceID)
+	if err != nil {
+		if errors.Is(err, errResourceServerInterfaceNotFound) {
+			return nil, &ErrorResourceServerInterfaceNotFound
+		}
+		rs.logger.Error(ctx, "Failed to get resource server interface", log.Error(err))
+		return nil, &tidcommon.InternalServerError
+	}
+
+	// An interface is addressed through its owning resource server.
+	if rsi.ResourceServerID != resourceServerID {
+		return nil, &ErrorResourceServerInterfaceNotFound
+	}
+
+	return &rsi, nil
+}
+
+// GetResourceServerInterfaceList lists the interfaces of a resource server.
+func (rs *resourceService) GetResourceServerInterfaceList(
+	ctx context.Context,
+	resourceServerID string,
+) ([]providers.ResourceServerInterface, *tidcommon.ServiceError) {
+	if resourceServerID == "" {
+		return nil, &ErrorMissingID
+	}
+
+	if _, svcErr := rs.validateAndGetResourceServer(ctx, resourceServerID); svcErr != nil {
+		return nil, svcErr
+	}
+
+	interfaces, err := rs.resourceStore.ListResourceServerInterfaces(ctx, resourceServerID)
+	if err != nil {
+		rs.logger.Error(ctx, "Failed to list resource server interfaces", log.Error(err))
+		return nil, &tidcommon.InternalServerError
+	}
+
+	return interfaces, nil
+}
+
+// UpdateResourceServerInterface updates the type and identifier of an interface. Ownership cannot be
+// changed through an update.
+func (rs *resourceService) UpdateResourceServerInterface(
+	ctx context.Context,
+	resourceServerID, interfaceID string,
+	rsi providers.ResourceServerInterface,
+) (*providers.ResourceServerInterface, *tidcommon.ServiceError) {
+	if svcErr := validateInterface(rsi); svcErr != nil {
+		return nil, svcErr
+	}
+
+	existing, svcErr := rs.GetResourceServerInterface(ctx, resourceServerID, interfaceID)
+	if svcErr != nil {
+		return nil, svcErr
+	}
+
+	if existing.IsReadOnly || rs.IsResourceServerDeclarative(resourceServerID) {
+		rs.logger.Debug(ctx, "Cannot modify a declarative resource server interface",
+			log.String("id", interfaceID))
+		return nil, ErrorImmutableResourceServer.WithParams(map[string]string{"id": resourceServerID})
+	}
+
+	if rsi.Identifier != existing.Identifier {
+		if svcErr := rs.ensureInterfaceIdentifierAvailable(ctx, rsi.Identifier); svcErr != nil {
+			return nil, svcErr
+		}
+	}
+
+	updated := providers.ResourceServerInterface{
+		ID:               interfaceID,
+		ResourceServerID: resourceServerID,
+		Type:             rsi.Type,
+		Identifier:       rsi.Identifier,
+	}
+
+	if err := rs.transactioner.Transact(ctx, func(txCtx context.Context) error {
+		return rs.resourceStore.UpdateResourceServerInterface(txCtx, updated)
+	}); err != nil {
+		rs.logger.Error(ctx, "Failed to update resource server interface", log.Error(err))
+		return nil, &tidcommon.InternalServerError
+	}
+
+	return &updated, nil
+}
+
+// DeleteResourceServerInterface deletes an interface of a resource server. Deleting the final
+// interface is allowed, but deletion is rejected while the interface has blocking dependencies.
+func (rs *resourceService) DeleteResourceServerInterface(
+	ctx context.Context,
+	resourceServerID, interfaceID string,
+) *tidcommon.ServiceError {
+	existing, svcErr := rs.GetResourceServerInterface(ctx, resourceServerID, interfaceID)
+	if svcErr != nil {
+		if svcErr.Code == ErrorResourceServerInterfaceNotFound.Code {
+			return nil // Idempotent delete
+		}
+		return svcErr
+	}
+
+	if existing.IsReadOnly || rs.IsResourceServerDeclarative(resourceServerID) {
+		rs.logger.Debug(ctx, "Cannot delete a declarative resource server interface",
+			log.String("id", interfaceID))
+		return ErrorImmutableResourceServer.WithParams(map[string]string{"id": resourceServerID})
+	}
+
+	// Refuse deletion while anything still references this interface, for example the deployment
+	// default interface configuration. Dependencies are aggregated through the registry, which keeps
+	// this service independent of the referencing components.
+	if svcErr := rs.ensureNoBlockingDependencies(
+		ctx, resourcedependency.ResourceTypeResourceServerInterface, interfaceID); svcErr != nil {
+		return svcErr
+	}
+
+	if err := rs.transactioner.Transact(ctx, func(txCtx context.Context) error {
+		return rs.resourceStore.DeleteResourceServerInterface(txCtx, interfaceID)
+	}); err != nil {
+		rs.logger.Error(ctx, "Failed to delete resource server interface", log.Error(err))
+		return &tidcommon.InternalServerError
+	}
+
+	return nil
+}
+
+// GetResourceServerInterfaceByID retrieves an interface by its ID, without knowing its owner.
+func (rs *resourceService) GetResourceServerInterfaceByID(
+	ctx context.Context,
+	interfaceID string,
+) (*providers.ResourceServerInterface, *tidcommon.ServiceError) {
+	if interfaceID == "" {
+		return nil, &ErrorMissingID
+	}
+
+	rsi, err := rs.resourceStore.GetResourceServerInterface(ctx, interfaceID)
+	if err != nil {
+		if errors.Is(err, errResourceServerInterfaceNotFound) {
+			return nil, &ErrorResourceServerInterfaceNotFound
+		}
+		rs.logger.Error(ctx, "Failed to get resource server interface", log.Error(err))
+		return nil, &tidcommon.InternalServerError
+	}
+
+	return &rsi, nil
+}
+
+// ensureInterfaceIdentifierAvailable rejects an interface identifier already used in the deployment.
+func (rs *resourceService) ensureInterfaceIdentifierAvailable(
+	ctx context.Context,
+	identifier string,
+) *tidcommon.ServiceError {
+	exists, err := rs.resourceStore.CheckResourceServerInterfaceIdentifierExists(ctx, identifier)
+	if err != nil {
+		rs.logger.Error(ctx, "Failed to check resource server interface identifier", log.Error(err))
+		return &tidcommon.InternalServerError
+	}
+	if exists {
+		rs.logger.Debug(ctx, "Resource server interface identifier already exists",
+			log.String("identifier", identifier))
+		return &ErrorIdentifierConflict
+	}
+	return nil
 }
 
 // Resource operations
@@ -590,19 +891,18 @@ func (rs *resourceService) CreateResource(
 		return nil, &ErrorHandleConflict
 	}
 
-	// For MCP resource servers, a resource (group) and an action (tool/resource) in the same parent
-	// context must not share a handle, since they would derive an identical permission string.
-	if resourceServer.Type == providers.ResourceServerTypeMCP {
-		actionHandleExists, err := rs.resourceStore.CheckActionHandleExists(
-			ctx, resourceServerID, resource.Parent, resource.Handle,
-		)
-		if err != nil {
-			rs.logger.Error(ctx, "Failed to check action handle", log.Error(err))
-			return nil, &tidcommon.InternalServerError
-		}
-		if actionHandleExists {
-			return nil, &ErrorHandleConflict
-		}
+	// A resource and an action in the same parent context must not share a handle, since they would
+	// derive an identical permission string. Permissions belong to the resource server, so the check
+	// does not depend on the interfaces it exposes.
+	actionHandleExists, err := rs.resourceStore.CheckActionHandleExists(
+		ctx, resourceServerID, resource.Parent, resource.Handle,
+	)
+	if err != nil {
+		rs.logger.Error(ctx, "Failed to check action handle", log.Error(err))
+		return nil, &tidcommon.InternalServerError
+	}
+	if actionHandleExists {
+		return nil, &ErrorHandleConflict
 	}
 
 	// Derive permission string based on hierarchy
@@ -906,9 +1206,6 @@ func (rs *resourceService) CreateAction(
 		return nil, err
 	}
 
-	if resourceServer.Type == providers.ResourceServerTypeMCP && action.Kind == "" {
-		action.Kind = providers.ActionKindTool
-	}
 	if svcErr := rs.validateActionKind(action.Kind); svcErr != nil {
 		return nil, svcErr
 	}
@@ -925,19 +1222,17 @@ func (rs *resourceService) CreateAction(
 		return nil, &ErrorHandleConflict
 	}
 
-	// For MCP resource servers, an action (tool/resource) and a resource (group) in the same parent
-	// context must not share a handle, since they would derive an identical permission string.
-	if resourceServer.Type == providers.ResourceServerTypeMCP {
-		resHandleExists, err := rs.resourceStore.CheckResourceHandleExists(
-			ctx, resourceServerID, action.Handle, resourceID,
-		)
-		if err != nil {
-			rs.logger.Error(ctx, "Failed to check resource handle", log.Error(err))
-			return nil, &tidcommon.InternalServerError
-		}
-		if resHandleExists {
-			return nil, &ErrorHandleConflict
-		}
+	// An action and a resource in the same parent context must not share a handle, since they would
+	// derive an identical permission string.
+	resHandleExists, err := rs.resourceStore.CheckResourceHandleExists(
+		ctx, resourceServerID, action.Handle, resourceID,
+	)
+	if err != nil {
+		rs.logger.Error(ctx, "Failed to check resource handle", log.Error(err))
+		return nil, &tidcommon.InternalServerError
+	}
+	if resHandleExists {
+		return nil, &ErrorHandleConflict
 	}
 
 	// Derive permission string based on hierarchy
@@ -1353,16 +1648,41 @@ func (rs *resourceService) validateResourceServerCreate(
 	if resourceServer.OUID == "" {
 		return &ErrorInvalidRequestFormat
 	}
-	if resourceServer.Identifier == "" {
-		return &ErrorInvalidRequestFormat
-	}
-	if resourceServer.Type != "" && !resourceServer.Type.IsValid() {
-		return &ErrorInvalidRequestFormat
+	// A resource server may be created without an interface, in which case it is a permission
+	// namespace with no audience until one is added. Whatever is declared is validated and persisted:
+	// the REST API supplies at most one, declarative and imported documents may declare several.
+	for _, rsi := range resourceServer.Interfaces {
+		if svcErr := validateInterface(rsi); svcErr != nil {
+			return svcErr
+		}
 	}
 	if resourceServer.Delimiter != "" {
 		if err := validateDelimiter(resourceServer.Delimiter); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// validateInterface validates the type and identifier of a resource server interface.
+func validateInterface(rsi providers.ResourceServerInterface) *tidcommon.ServiceError {
+	if !rsi.Type.IsValid() {
+		return &ErrorInvalidInterfaceType
+	}
+	if err := ValidateInterfaceIdentifier(rsi.Identifier); err != nil {
+		return &ErrorInvalidInterfaceIdentifier
+	}
+	return nil
+}
+
+// ValidateInterfaceIdentifier reports whether an identifier can be used as an interface audience.
+// Any non-empty value is accepted: an identifier is an audience string, and a deployment is free to
+// use one that is not a URI. Only clients passing it in the RFC 8707 resource parameter need an
+// absolute URI, which the resource parameter validation enforces at request time. The declarative
+// loader and the management API share this rule so both paths accept the same values.
+func ValidateInterfaceIdentifier(identifier string) error {
+	if identifier == "" {
+		return fmt.Errorf("identifier cannot be empty")
 	}
 	return nil
 }

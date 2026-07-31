@@ -166,7 +166,7 @@ func (suite *RoleAPITestSuite) SetupSuite() {
 	rs1 := testutils.ResourceServer{
 		Name:        "Test Booking System",
 		Description: "Resource server for testing role permissions",
-		Identifier:  "test-booking-system",
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: "test-booking-system"},
 		OUID:        testOUID,
 	}
 	// Create actions on resource server 1
@@ -187,7 +187,7 @@ func (suite *RoleAPITestSuite) SetupSuite() {
 	rs2 := testutils.ResourceServer{
 		Name:        "Test Payment System",
 		Description: "Second resource server for multi-server testing",
-		Identifier:  "test-payment-system",
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: "test-payment-system"},
 		OUID:        testOUID,
 	}
 	action3 := testutils.Action{

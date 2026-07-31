@@ -311,10 +311,11 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 
 	// Initialize server-wide configuration after its handler dependencies.
 	serverConfigHandlers := map[serverconfig.ConfigName]serverconfig.ServerConfigHandlerInterface{
-		serverconfig.ConfigNameCORS:                  cors.OriginHandler{},
-		serverconfig.ConfigNameDefaultResourceServer: resource.NewDefaultResourceServerConfigHandler(resourceService),
-		serverconfig.ConfigNameSession:               flowsession.ConfigHandler{},
-		serverconfig.ConfigNameFlow:                  flowConfigHandler,
+		serverconfig.ConfigNameCORS: cors.OriginHandler{},
+		serverconfig.ConfigNameDefaultResourceServerInterface: resource.NewDefaultResourceServerInterfaceConfigHandler(
+			resourceService),
+		serverconfig.ConfigNameSession: flowsession.ConfigHandler{},
+		serverconfig.ConfigNameFlow:    flowConfigHandler,
 	}
 	serverConfigService, serverConfigExporter, err := serverconfig.Initialize(mux, cacheManager, serverConfigHandlers)
 	fatalOnError(ctx, logger, err, "Failed to initialize server config service")
@@ -323,10 +324,10 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 	// CORS origins come from the server-config cors section.
 	cors.InitializeDynamicMatcher(serverConfigService)
 
-	// Decorate the resource provider so an empty identifier resolves the configured default resource
-	// server. Keeps the default-resource-server policy server-side: OAuth, CIBA, PAR, grant handlers,
+	// Decorate the resource provider so an empty identifier resolves the resource server owning the
+	// configured default interface. Keeps the default-interface policy server-side: OAuth, CIBA, PAR, grant handlers,
 	// and the flow executor depend only on providers.ResourceServerProvider, not on serverConfigService.
-	// The base resourceService is still used for resource-management APIs and server-config validation.
+	// The resourceService is still used for resource-management APIs and server-config validation.
 	resourceServerProvider := resource.NewDefaultAwareResourceServerProvider(resourceService, serverConfigService)
 
 	flowConfig := flowconfig.FromServerRuntime()
@@ -431,7 +432,7 @@ func registerServices(mux *http.ServeMux, cacheManager cache.CacheManagerInterfa
 		ou:          ouService,
 		resource:    resourceService,
 	}, applicationService, agentService, flowMgtService, roleAssignmentService, groupService,
-		ouService, ouUserResolver, ouGroupResolver, resourceService)
+		ouService, ouUserResolver, ouGroupResolver, resourceService, serverConfigService)
 
 	// Initialize design resolve service for theme and layout resolution
 	designResolveService := resolve.Initialize(mux, themeMgtService, layoutMgtService, applicationService)

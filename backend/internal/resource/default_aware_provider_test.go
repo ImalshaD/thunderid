@@ -34,7 +34,7 @@ import (
 	"github.com/thunder-id/thunderid/tests/mocks/serverconfigmock"
 )
 
-const defaultResourceServerConfigName = "defaultResourceServer"
+const defaultResourceServerInterfaceConfigName = "defaultResourceServerInterface"
 
 type DefaultAwareProviderTestSuite struct {
 	suite.Suite
@@ -56,7 +56,7 @@ func (suite *DefaultAwareProviderTestSuite) SetupTest() {
 // An explicit identifier is delegated to the wrapped provider verbatim; the server-config store is
 // never consulted.
 func (suite *DefaultAwareProviderTestSuite) TestExplicitIdentifier_DelegatesToBase() {
-	rs := providers.ResourceServer{ID: "rs01", Identifier: "https://api.example.com"}
+	rs := providers.ResourceServer{ID: "rs01"}
 	suite.base.On("GetResourceServerByIdentifier", mock.Anything, "https://api.example.com").
 		Return(&rs, nil)
 
@@ -77,23 +77,44 @@ func (suite *DefaultAwareProviderTestSuite) TestExplicitIdentifier_PropagatesBas
 	assert.Same(suite.T(), svcErr, err)
 }
 
-// An empty identifier resolves the configured default resource server through the wrapped provider.
+// An empty identifier resolves the resource server owning the configured default interface, carrying
+// exactly that interface so the caller binds the token audience to the default identifier.
 func (suite *DefaultAwareProviderTestSuite) TestEmptyIdentifier_DefaultConfigured_Resolves() {
-	rs := providers.ResourceServer{ID: "rs-1", Identifier: "https://api.example.com"}
-	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerConfigName).
-		Return(resource.DefaultResourceServerConfig{ResourceServerID: "rs-1"}, nil)
+	rs := providers.ResourceServer{
+		ID: "rs-1",
+		Interfaces: []providers.ResourceServerInterface{
+			{ID: "rsi-api", Type: providers.ResourceServerInterfaceTypeAPI, Identifier: "https://api.example.com"},
+			{ID: "rsi-mcp", Type: providers.ResourceServerInterfaceTypeMCP, Identifier: "https://mcp.example.com"},
+		},
+	}
+	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerInterfaceConfigName).
+		Return(resource.DefaultResourceServerInterfaceConfig{ResourceServerInterfaceID: "rsi-mcp"}, nil)
+	suite.base.On("GetResourceServerInterfaceByID", mock.Anything, "rsi-mcp").
+		Return(&providers.ResourceServerInterface{
+			ID:               "rsi-mcp",
+			ResourceServerID: "rs-1",
+			Type:             providers.ResourceServerInterfaceTypeMCP,
+			Identifier:       "https://mcp.example.com",
+		}, nil)
 	suite.base.On("GetResourceServer", mock.Anything, "rs-1").Return(&rs, nil)
 
 	resolved, err := suite.subject.GetResourceServerByIdentifier(context.Background(), "")
 
 	assert.Nil(suite.T(), err)
-	assert.Equal(suite.T(), &rs, resolved)
+	suite.Require().NotNil(resolved)
+	assert.Equal(suite.T(), "rs-1", resolved.ID)
+	suite.Require().Len(resolved.Interfaces, 1)
+	assert.Equal(suite.T(), "rsi-mcp", resolved.Interfaces[0].ID)
+	assert.Equal(suite.T(), "https://mcp.example.com", resolved.Interfaces[0].Identifier)
+
+	// The resource server held in the store keeps every interface: only the resolved copy is narrowed.
+	assert.Len(suite.T(), rs.Interfaces, 2)
 }
 
 // No default configured surfaces as a client error so the caller maps it to invalid_target.
 func (suite *DefaultAwareProviderTestSuite) TestEmptyIdentifier_NoDefaultConfigured_ReturnsClientError() {
-	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerConfigName).
-		Return(resource.DefaultResourceServerConfig{ResourceServerID: ""}, nil)
+	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerInterfaceConfigName).
+		Return(resource.DefaultResourceServerInterfaceConfig{ResourceServerInterfaceID: ""}, nil)
 
 	resolved, err := suite.subject.GetResourceServerByIdentifier(context.Background(), "")
 
@@ -105,7 +126,7 @@ func (suite *DefaultAwareProviderTestSuite) TestEmptyIdentifier_NoDefaultConfigu
 // A merged value of an unexpected type is treated as "no default configured" (client error), matching
 // the pre-refactor behavior.
 func (suite *DefaultAwareProviderTestSuite) TestEmptyIdentifier_ConfigTypeMismatch_ReturnsClientError() {
-	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerConfigName).
+	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerInterfaceConfigName).
 		Return("unexpected-type", nil)
 
 	resolved, err := suite.subject.GetResourceServerByIdentifier(context.Background(), "")
@@ -118,7 +139,7 @@ func (suite *DefaultAwareProviderTestSuite) TestEmptyIdentifier_ConfigTypeMismat
 // A failure reading the merged config is propagated as a server error.
 func (suite *DefaultAwareProviderTestSuite) TestEmptyIdentifier_ConfigReadFailure_ReturnsServerError() {
 	svcErr := &tidcommon.ServiceError{Type: tidcommon.ServerErrorType, Code: "SCE-5000"}
-	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerConfigName).
+	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerInterfaceConfigName).
 		Return(nil, svcErr)
 
 	resolved, err := suite.subject.GetResourceServerByIdentifier(context.Background(), "")
@@ -127,12 +148,12 @@ func (suite *DefaultAwareProviderTestSuite) TestEmptyIdentifier_ConfigReadFailur
 	assert.Same(suite.T(), svcErr, err)
 }
 
-// A configured default that no longer exists fails closed with the wrapped provider's error.
+// A configured default interface that no longer exists fails closed with the resolution error.
 func (suite *DefaultAwareProviderTestSuite) TestEmptyIdentifier_DefaultDeleted_PropagatesBaseError() {
-	svcErr := &tidcommon.ServiceError{Type: tidcommon.ClientErrorType, Code: "RES-1003"}
-	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerConfigName).
-		Return(resource.DefaultResourceServerConfig{ResourceServerID: "rs-gone"}, nil)
-	suite.base.On("GetResourceServer", mock.Anything, "rs-gone").Return(nil, svcErr)
+	svcErr := &tidcommon.ServiceError{Type: tidcommon.ClientErrorType, Code: "RES-1024"}
+	suite.config.On("GetMergedConfig", mock.Anything, defaultResourceServerInterfaceConfigName).
+		Return(resource.DefaultResourceServerInterfaceConfig{ResourceServerInterfaceID: "rsi-gone"}, nil)
+	suite.base.On("GetResourceServerInterfaceByID", mock.Anything, "rsi-gone").Return(nil, svcErr)
 
 	resolved, err := suite.subject.GetResourceServerByIdentifier(context.Background(), "")
 
@@ -161,7 +182,7 @@ func (suite *DefaultAwareProviderTestSuite) TestValidatePermissions_Delegates() 
 	assert.Empty(suite.T(), invalid)
 }
 
-func (suite *DefaultAwareProviderTestSuite) TestConstructor_PanicsOnNilBase() {
+func (suite *DefaultAwareProviderTestSuite) TestConstructor_PanicsOnNilResourceService() {
 	assert.Panics(suite.T(), func() {
 		resource.NewDefaultAwareResourceServerProvider(nil, suite.config)
 	})

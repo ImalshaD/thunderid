@@ -24,7 +24,8 @@ const ResourceServerQueryKeys = {
   SERVER_ACTIONS: 'server-actions',
   RESOURCE_ACTIONS: 'resource-actions',
   SERVER_CONFIG: 'server-config',
-  DEFAULT_RESOURCE_SERVER: 'defaultResourceServer',
+  DEFAULT_RESOURCE_SERVER_INTERFACE: 'defaultResourceServerInterface',
+  RESOURCE_SERVER_INTERFACES: 'resource-server-interfaces',
 } as const;
 
 export default ResourceServerQueryKeys;

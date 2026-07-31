@@ -832,12 +832,69 @@ func (s *importService) importTranslation(ctx context.Context, doc parsedDocumen
 	return successOutcome(resourceTypeTranslation, "", req.Language, operationUpdate)
 }
 
+// importResourceServerInterfaces reconciles declared interfaces by stable interface ID, updating
+// changed interfaces and creating missing ones.
+func (s *importService) importResourceServerInterfaces(
+	ctx context.Context, serverID string, declared []providers.ResourceServerInterface,
+) *tidcommon.ServiceError {
+	if len(declared) == 0 {
+		return nil
+	}
+
+	existing, svcErr := s.resourceService.GetResourceServerInterfaceList(ctx, serverID)
+	if svcErr != nil {
+		return svcErr
+	}
+
+	byID := make(map[string]providers.ResourceServerInterface, len(existing))
+	byIdentifier := make(map[string]providers.ResourceServerInterface, len(existing))
+	for _, rsi := range existing {
+		byID[rsi.ID] = rsi
+		byIdentifier[rsi.Identifier] = rsi
+	}
+
+	for _, rsi := range declared {
+		// A declared ID is the stable handle for an interface, so it is what reconciliation matches on:
+		// re-importing a bundle with an edited identifier or type updates that interface in place
+		// instead of adding a second one.
+		if current, ok := byID[rsi.ID]; ok {
+			if current.Type == rsi.Type && current.Identifier == rsi.Identifier {
+				continue
+			}
+			if _, svcErr := s.resourceService.UpdateResourceServerInterface(
+				ctx, serverID, rsi.ID, rsi); svcErr != nil {
+				return svcErr
+			}
+			continue
+		}
+
+		// Without a declared ID the identifier is the only handle available, and creation already
+		// persisted the interfaces the document declared, so an identifier already present is a match.
+		if _, ok := byIdentifier[rsi.Identifier]; ok {
+			continue
+		}
+
+		if _, svcErr := s.resourceService.CreateResourceServerInterface(ctx, serverID, rsi); svcErr != nil {
+			return svcErr
+		}
+	}
+
+	// Interfaces present on the resource server but absent from the document are left alone, matching
+	// how imported resources and actions are reconciled: an import adds and updates, never deletes.
+
+	return nil
+}
+
 // importResourceServerChildren creates resources and actions nested under a resource server.
 // It first computes permission strings via ProcessResourceServer, then calls the resource service
 // for each resource and action.  Existing resources/actions (on upsert paths) are silently skipped.
 func (s *importService) importResourceServerChildren(
 	ctx context.Context, serverID string, rs providers.ResourceServer,
 ) *tidcommon.ServiceError {
+	if svcErr := s.importResourceServerInterfaces(ctx, serverID, rs.Interfaces); svcErr != nil {
+		return svcErr
+	}
+
 	if len(rs.Resources) == 0 {
 		return nil
 	}
@@ -853,7 +910,7 @@ func (s *importService) importResourceServerChildren(
 		}
 	}
 
-	// handleToID maps resource handle → created/resolved ID for parent resolution.
+	// handleToID maps resource handle -> created/resolved ID for parent resolution.
 	handleToID := make(map[string]string)
 
 	for i := range rs.Resources {

@@ -46,11 +46,15 @@ export default function ConfigureName({
 
   const suggestions: string[] = useMemo((): string[] => generateRandomHumanReadableIdentifiers(), []);
 
+  // Custom resource servers are created without an interface, so only API and MCP need an identifier
+  // before the step is complete.
+  const requiresIdentifier = selectedType !== 'CUSTOM';
+
   useEffect((): void => {
     if (onReadyChange) {
-      onReadyChange(name.trim().length > 0 && identifier.trim().length > 0);
+      onReadyChange(name.trim().length > 0 && (!requiresIdentifier || identifier.trim().length > 0));
     }
-  }, [name, identifier, onReadyChange]);
+  }, [name, identifier, requiresIdentifier, onReadyChange]);
 
   const handleNameChange = (e: ChangeEvent<HTMLInputElement>): void => {
     onNameChange(e.target.value);
@@ -116,33 +120,35 @@ export default function ConfigureName({
         </Box>
       </Stack>
 
-      <FormControl fullWidth required>
-        <FormLabel htmlFor="resource-server-identifier-input">
-          {t('resourceServers:create.name.identifierLabel', 'Identifier')}
-        </FormLabel>
-        <TextField
-          id="resource-server-identifier-input"
-          fullWidth
-          value={identifier}
-          onChange={handleIdentifierChange}
-          placeholder={
-            selectedType === 'MCP'
-              ? t('resourceServers:create.name.identifierPlaceholderMcp', 'https://mcp.example.com')
-              : t('resourceServers:create.name.identifierPlaceholder', 'https://api.example.com')
-          }
-          helperText={
-            selectedType === 'MCP'
-              ? t(
-                  'resourceServers:create.name.identifierHintMcp',
-                  'A unique identifier for this MCP server. When set as an absolute URI, it becomes the token audience for RFC 8707 resource indicators.',
-                )
-              : t(
-                  'resourceServers:create.name.identifierHint',
-                  'A unique identifier for this resource server. When set as an absolute URI, it becomes the token audience for RFC 8707 resource indicators.',
-                )
-          }
-        />
-      </FormControl>
+      {requiresIdentifier && (
+        <FormControl fullWidth required>
+          <FormLabel htmlFor="resource-server-identifier-input">
+            {t('resourceServers:create.name.identifierLabel', 'Identifier')}
+          </FormLabel>
+          <TextField
+            id="resource-server-identifier-input"
+            fullWidth
+            value={identifier}
+            onChange={handleIdentifierChange}
+            placeholder={
+              selectedType === 'MCP'
+                ? t('resourceServers:create.name.identifierPlaceholderMcp', 'https://mcp.example.com')
+                : t('resourceServers:create.name.identifierPlaceholder', 'https://api.example.com')
+            }
+            helperText={
+              selectedType === 'MCP'
+                ? t(
+                    'resourceServers:create.name.identifierHintMcp',
+                    'A unique identifier for this MCP server. When set as an absolute URI, it becomes the token audience for RFC 8707 resource indicators.',
+                  )
+                : t(
+                    'resourceServers:create.name.identifierHint',
+                    'A unique identifier for this resource server. When set as an absolute URI, it becomes the token audience for RFC 8707 resource indicators.',
+                  )
+            }
+          />
+        </FormControl>
+      )}
     </Stack>
   );
 }

@@ -103,13 +103,13 @@ The foundation creates the two resource servers, three roles, two demo users, an
    | `cancel`    | `booking:cancel`     |
    | `recommend` | `booking:recommend`  |
 
-   Configure the booking resource server as the default for Wayfinder web sign-in tokens. The web application requests `booking:*` permissions without a `resource`, so the default must be the resource server that defines those permissions. The chat widget targets `http://localhost:8790/chat` explicitly.
+   Configure the booking resource server interface as the default for Wayfinder web sign-in tokens. The web application requests `booking:*` permissions without a `resource`, so the default must be an interface of the resource server that defines those permissions, and its identifier becomes the token audience. The chat widget targets `http://localhost:8790/chat` explicitly.
 
    ```bash
-   curl -kL -X PUT https://localhost:8090/server-config/defaultResourceServer \
+   curl -kL -X PUT https://localhost:8090/server-config/defaultResourceServerInterface \
      -H 'Content-Type: application/json' \
      -H 'Authorization: Bearer <access-token>' \
-     -d '{ "resourceServerId": "<wayfinder-rs-id>" }'
+     -d '{ "resourceServerInterfaceId": "<wayfinder-rs-interface-id>" }'
    ```
 
 3. **Create the `Chat User` role.**

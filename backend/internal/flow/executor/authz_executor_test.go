@@ -49,7 +49,7 @@ func createTestAuthzExecutor(t *testing.T,
 	mockResource := resourcemock.NewResourceServiceInterfaceMock(t)
 	mockResource.On("GetResourceServerByIdentifier", mock.Anything, mock.Anything).
 		Return(func(_ context.Context, identifier string) *providers.ResourceServer {
-			return &providers.ResourceServer{ID: identifier, Identifier: identifier}
+			return resolvedResourceServer(identifier, identifier)
 		}, func(_ context.Context, _ string) *tidcommon.ServiceError { return nil }).Maybe()
 	return createTestAuthzExecutorWithResource(t, mockAuthzService, mockEntityProvider, mockAuthnProvider, mockResource)
 }
@@ -235,8 +235,8 @@ func TestAuthorizationExecutor_Execute_DropsPermissionsWhenNoResourceServerBindi
 
 func TestAuthorizationExecutor_Execute_DropsPermissionsWhenResourceServiceUnavailable(t *testing.T) {
 	// The embedded engine may construct the executor without a resource server service. A
-	// permission-bearing request that carries a resource server identifier must fail closed (drop the
-	// permissions) rather than panic on the nil service.
+	// permission-bearing request that carries a resource server interface identifier must fail
+	// closed (drop the permissions) rather than panic on the nil service.
 	mockAuthzService := new(authzmock.AuthorizationProviderMock)
 	mockEntityProvider := new(entityprovidermock.EntityProviderInterfaceMock)
 	mockAuthnProvider := managermock.NewAuthnProviderManagerMock(t)
@@ -318,7 +318,7 @@ func TestAuthorizationExecutor_Execute_DefaultResourceServerFallback(t *testing.
 	// A default-aware provider resolves the empty identifier to the configured default resource server.
 	mockResource := resourcemock.NewResourceServiceInterfaceMock(t)
 	mockResource.On("GetResourceServerByIdentifier", mock.Anything, "").
-		Return(&providers.ResourceServer{ID: "rs-default", Identifier: "rs-default"}, nil)
+		Return(resolvedResourceServer("rs-default", "rs-default"), nil)
 
 	executor := createTestAuthzExecutorWithResource(
 		t, mockAuthzService, mockEntityProvider, mockAuthnProvider, mockResource)
@@ -966,4 +966,14 @@ func TestAuthorizationExecutor_ExtractGroupIDs_FromEntityProvider_Error(t *testi
 	assert.Error(t, err)
 	assert.Nil(t, groupIDs)
 	mockEntityProvider.AssertExpectations(t)
+}
+
+func resolvedResourceServer(id, identifier string) *providers.ResourceServer {
+	return &providers.ResourceServer{
+		ID: id,
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: identifier,
+		}},
+	}
 }

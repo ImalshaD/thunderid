@@ -88,7 +88,10 @@ func (suite *ResourceServerAPITestSuite) TestCreateResourceServer() {
 	suite.Equal(reqBody.Name, rs.Name)
 	suite.Equal(reqBody.Description, rs.Description)
 	suite.Equal(reqBody.OUID, rs.OUID)
-	suite.NotEmpty(rs.Identifier)
+	suite.Require().Len(rs.Interfaces, 1, "Creation must persist the initial interface")
+	suite.NotEmpty(rs.Interfaces[0].ID)
+	suite.Equal("API", rs.Interfaces[0].Type)
+	suite.NotEmpty(rs.Interfaces[0].Identifier)
 	suite.NotEmpty(rs.Delimiter, "Delimiter should be set to default value")
 	suite.Equal(":", rs.Delimiter, "Default delimiter should be ':' based on default configuration")
 }
@@ -109,7 +112,8 @@ func (suite *ResourceServerAPITestSuite) TestCreateResourceServerWithoutOptional
 	suite.Require().NoError(err)
 	suite.Equal(reqBody.Name, rs.Name)
 	suite.Empty(rs.Description)
-	suite.NotEmpty(rs.Identifier)
+	suite.Require().Len(rs.Interfaces, 1)
+	suite.NotEmpty(rs.Interfaces[0].Identifier)
 }
 
 func (suite *ResourceServerAPITestSuite) TestCreateResourceServerDuplicateName() {
@@ -134,9 +138,9 @@ func (suite *ResourceServerAPITestSuite) TestCreateResourceServerDuplicateName()
 
 func (suite *ResourceServerAPITestSuite) TestCreateResourceServerDuplicateIdentifier() {
 	reqBody1 := CreateResourceServerRequest{
-		Name:       "Resource Server With Identifier 1",
-		Identifier: "https://api.example.com/booking/",
-		OUID:       testOUID,
+		Name:      "Resource Server With Identifier 1",
+		Interface: ResourceServerInterfaceRequest{Type: "API", Identifier: "https://api.example.com/booking/"},
+		OUID:      testOUID,
 	}
 
 	rsID1, err := createResourceServer(reqBody1)
@@ -144,9 +148,9 @@ func (suite *ResourceServerAPITestSuite) TestCreateResourceServerDuplicateIdenti
 	defer deleteResourceServer(rsID1)
 
 	reqBody2 := CreateResourceServerRequest{
-		Name:       "Resource Server With Identifier 2",
-		Identifier: "https://api.example.com/booking/",
-		OUID:       testOUID,
+		Name:      "Resource Server With Identifier 2",
+		Interface: ResourceServerInterfaceRequest{Type: "API", Identifier: "https://api.example.com/booking/"},
+		OUID:      testOUID,
 	}
 
 	_, err = createResourceServer(reqBody2)
@@ -156,9 +160,9 @@ func (suite *ResourceServerAPITestSuite) TestCreateResourceServerDuplicateIdenti
 
 func (suite *ResourceServerAPITestSuite) TestCreateResourceServerInvalidOU() {
 	reqBody := CreateResourceServerRequest{
-		Name:       "Invalid OU Resource Server",
-		Identifier: "https://api.example.com/invalid-ou-rs",
-		OUID:       "00000000-0000-0000-0000-000000000000",
+		Name:      "Invalid OU Resource Server",
+		Interface: ResourceServerInterfaceRequest{Type: "API", Identifier: "https://api.example.com/invalid-ou-rs"},
+		OUID:      "00000000-0000-0000-0000-000000000000",
 	}
 
 	_, err := createResourceServer(reqBody)
@@ -250,7 +254,7 @@ func (suite *ResourceServerAPITestSuite) TestUpdateResourceServer() {
 	reqBody := CreateResourceServerRequest{
 		Name:        "Update Test Resource Server",
 		Description: "Original description",
-		Identifier:  "https://api.example.com/original/",
+		Interface:   ResourceServerInterfaceRequest{Type: "API", Identifier: "https://api.example.com/original/"},
 		OUID:        testOUID,
 		Delimiter:   &delimiter,
 	}
@@ -262,7 +266,6 @@ func (suite *ResourceServerAPITestSuite) TestUpdateResourceServer() {
 	updateReq := UpdateResourceServerRequest{
 		Name:        "Updated Resource Server",
 		Description: "Updated description",
-		Identifier:  "https://api.example.com/updated/",
 		OUID:        testOUID,
 	}
 
@@ -273,15 +276,17 @@ func (suite *ResourceServerAPITestSuite) TestUpdateResourceServer() {
 	suite.Require().NoError(err)
 	suite.Equal(updateReq.Name, rs.Name)
 	suite.Equal(updateReq.Description, rs.Description)
-	suite.Equal(updateReq.Identifier, rs.Identifier, "Identifier should be updated")
 	suite.Equal("/", rs.Delimiter, "Delimiter should remain unchanged after update")
 }
 
-func (suite *ResourceServerAPITestSuite) TestUpdateResourceServerPreservesIdentifierWhenOmitted() {
+// Interfaces are managed through the nested interface endpoints, so updating the resource server
+// leaves its audience identifiers untouched.
+func (suite *ResourceServerAPITestSuite) TestUpdateResourceServerPreservesInterfaces() {
+	const identifier = "https://api.example.com/preserve-interfaces"
 	reqBody := CreateResourceServerRequest{
-		Name:       "Preserve Identifier RS",
-		Identifier: "https://api.example.com/preserve-identifier",
-		OUID:       testOUID,
+		Name:      "Preserve Interfaces RS",
+		Interface: ResourceServerInterfaceRequest{Type: "API", Identifier: identifier},
+		OUID:      testOUID,
 	}
 
 	rsID, err := createResourceServer(reqBody)
@@ -289,7 +294,7 @@ func (suite *ResourceServerAPITestSuite) TestUpdateResourceServerPreservesIdenti
 	defer deleteResourceServer(rsID)
 
 	updateReq := UpdateResourceServerRequest{
-		Name: "Preserve Identifier RS Updated",
+		Name: "Preserve Interfaces RS Updated",
 		OUID: testOUID,
 	}
 
@@ -298,7 +303,8 @@ func (suite *ResourceServerAPITestSuite) TestUpdateResourceServerPreservesIdenti
 
 	rs, err := getResourceServer(rsID)
 	suite.Require().NoError(err)
-	suite.Equal(reqBody.Identifier, rs.Identifier, "Identifier should be preserved when not provided in update")
+	suite.Require().Len(rs.Interfaces, 1)
+	suite.Equal(identifier, rs.Interfaces[0].Identifier, "Interfaces should survive a resource server update")
 }
 
 func (suite *ResourceServerAPITestSuite) TestUpdateResourceServerNotFound() {
@@ -428,7 +434,12 @@ func (suite *ResourceServerAPITestSuite) TestDefaultSystemResourceServerHasMCPId
 	}
 
 	suite.Require().NotNil(systemRS, "Default 'System' resource server should exist")
-	suite.Equal(systemResourceServerIdentifier, systemRS.Identifier)
+	// The System resource server exposes its MCP endpoint as one of its interfaces.
+	var identifiers []string
+	for _, rsi := range systemRS.Interfaces {
+		identifiers = append(identifiers, rsi.Identifier)
+	}
+	suite.Contains(identifiers, systemResourceServerIdentifier)
 }
 
 // Helper functions
@@ -436,8 +447,14 @@ func (suite *ResourceServerAPITestSuite) TestDefaultSystemResourceServerHasMCPId
 func createResourceServer(req CreateResourceServerRequest) (string, error) {
 	client := testutils.GetHTTPClient()
 
-	if req.Identifier == "" {
-		req.Identifier = fmt.Sprintf("https://api.example.com/integration/%d", time.Now().UnixNano())
+	if req.Interface.Identifier == "" {
+		req.Interface = ResourceServerInterfaceRequest{
+			Type:       "API",
+			Identifier: fmt.Sprintf("https://api.example.com/integration/%d", time.Now().UnixNano()),
+		}
+	}
+	if req.Interface.Type == "" {
+		req.Interface.Type = "API"
 	}
 
 	body, _ := json.Marshal(req)

@@ -504,7 +504,7 @@ func validateEvaluationRequest(request AccessEvaluationRequest) *tidcommon.Servi
 	return nil
 }
 
-// resolveResourceServerID resolves a resource server identifier to its internal ID.
+// resolveResourceServerID resolves a resource server interface identifier to its owning server ID.
 func (s *authzenService) resolveResourceServerID(ctx context.Context, resourceServerIdentifier string) (
 	string, *tidcommon.ServiceError) {
 	if strings.TrimSpace(resourceServerIdentifier) == "" {

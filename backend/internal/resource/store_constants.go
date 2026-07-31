@@ -28,14 +28,14 @@ var (
 	queryCreateResourceServer = dbmodel.DBQuery{
 		ID: "RSQ-RES_MGT-01",
 		Query: `INSERT INTO "RESOURCE_SERVER"
-			(ID, OU_ID, NAME, DESCRIPTION, IDENTIFIER, TYPE, PROPERTIES, DEPLOYMENT_ID)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			(ID, OU_ID, NAME, DESCRIPTION, PROPERTIES, DEPLOYMENT_ID)
+			VALUES ($1, $2, $3, $4, $5, $6)`,
 	}
 
 	// queryGetResourceServerByID retrieves a resource server by ID.
 	queryGetResourceServerByID = dbmodel.DBQuery{
 		ID: "RSQ-RES_MGT-02",
-		Query: `SELECT ID, OU_ID, NAME, DESCRIPTION, IDENTIFIER, TYPE, PROPERTIES
+		Query: `SELECT ID, OU_ID, NAME, DESCRIPTION, PROPERTIES
 			FROM "RESOURCE_SERVER"
 			WHERE ID = $1 AND DEPLOYMENT_ID = $2`,
 	}
@@ -43,7 +43,7 @@ var (
 	// queryGetResourceServerList retrieves a list of resource servers with pagination.
 	queryGetResourceServerList = dbmodel.DBQuery{
 		ID: "RSQ-RES_MGT-03",
-		Query: `SELECT ID, OU_ID, NAME, DESCRIPTION, IDENTIFIER, TYPE, PROPERTIES
+		Query: `SELECT ID, OU_ID, NAME, DESCRIPTION, PROPERTIES
 			FROM "RESOURCE_SERVER"
 			WHERE DEPLOYMENT_ID = $3
 			ORDER BY CREATED_AT DESC
@@ -60,8 +60,8 @@ var (
 	queryUpdateResourceServer = dbmodel.DBQuery{
 		ID: "RSQ-RES_MGT-05",
 		Query: `UPDATE "RESOURCE_SERVER"
-			SET OU_ID = $1, NAME = $2, DESCRIPTION = $3, IDENTIFIER = $4, TYPE = $5, PROPERTIES = $6
-			WHERE ID = $7 AND DEPLOYMENT_ID = $8`,
+			SET OU_ID = $1, NAME = $2, DESCRIPTION = $3, PROPERTIES = $4
+			WHERE ID = $5 AND DEPLOYMENT_ID = $6`,
 	}
 
 	// queryDeleteResourceServer deletes a resource server.
@@ -76,17 +76,68 @@ var (
 		Query: `SELECT COUNT(*) as count FROM "RESOURCE_SERVER" WHERE NAME = $1 AND DEPLOYMENT_ID = $2`,
 	}
 
-	// queryCheckResourceServerIdentifierExists checks if a resource server identifier already exists.
-	queryCheckResourceServerIdentifierExists = dbmodel.DBQuery{
-		ID:    "RSQ-RES_MGT-33",
-		Query: `SELECT COUNT(*) as count FROM "RESOURCE_SERVER" WHERE IDENTIFIER = $1 AND DEPLOYMENT_ID = $2`,
+	// queryGetResourceServerByInterfaceIdentifier retrieves the resource server owning an interface
+	// identifier.
+	queryGetResourceServerByInterfaceIdentifier = dbmodel.DBQuery{
+		ID: "RSQ-RES_MGT-34",
+		Query: `SELECT rs.ID, rs.OU_ID, rs.NAME, rs.DESCRIPTION, rs.PROPERTIES
+			FROM "RESOURCE_SERVER" rs
+			INNER JOIN "RESOURCE_SERVER_INTERFACE" rsi
+				ON rsi.RESOURCE_SERVER_ID = rs.ID AND rsi.DEPLOYMENT_ID = rs.DEPLOYMENT_ID
+			WHERE rsi.IDENTIFIER = $1 AND rs.DEPLOYMENT_ID = $2`,
 	}
 
-	// queryGetResourceServerByIdentifier retrieves a resource server by identifier.
-	queryGetResourceServerByIdentifier = dbmodel.DBQuery{
-		ID: "RSQ-RES_MGT-34",
-		Query: `SELECT ID, OU_ID, NAME, DESCRIPTION, IDENTIFIER, TYPE, PROPERTIES
-			FROM "RESOURCE_SERVER"
+	// queryCreateResourceServerInterface creates a new resource server interface.
+	queryCreateResourceServerInterface = dbmodel.DBQuery{
+		ID: "RSQ-RES_MGT-41",
+		Query: `INSERT INTO "RESOURCE_SERVER_INTERFACE"
+			(ID, RESOURCE_SERVER_ID, TYPE, IDENTIFIER, DEPLOYMENT_ID)
+			VALUES ($1, $2, $3, $4, $5)`,
+	}
+
+	// queryGetResourceServerInterfaceByID retrieves a resource server interface by ID.
+	queryGetResourceServerInterfaceByID = dbmodel.DBQuery{
+		ID: "RSQ-RES_MGT-42",
+		Query: `SELECT ID, RESOURCE_SERVER_ID, TYPE, IDENTIFIER
+			FROM "RESOURCE_SERVER_INTERFACE"
+			WHERE ID = $1 AND DEPLOYMENT_ID = $2`,
+	}
+
+	// queryGetResourceServerInterfaceByIdentifier retrieves a resource server interface by identifier.
+	queryGetResourceServerInterfaceByIdentifier = dbmodel.DBQuery{
+		ID: "RSQ-RES_MGT-43",
+		Query: `SELECT ID, RESOURCE_SERVER_ID, TYPE, IDENTIFIER
+			FROM "RESOURCE_SERVER_INTERFACE"
+			WHERE IDENTIFIER = $1 AND DEPLOYMENT_ID = $2`,
+	}
+
+	// queryGetResourceServerInterfaceList retrieves the interfaces of a resource server.
+	queryGetResourceServerInterfaceList = dbmodel.DBQuery{
+		ID: "RSQ-RES_MGT-44",
+		Query: `SELECT ID, RESOURCE_SERVER_ID, TYPE, IDENTIFIER
+			FROM "RESOURCE_SERVER_INTERFACE"
+			WHERE RESOURCE_SERVER_ID = $1 AND DEPLOYMENT_ID = $2
+			ORDER BY CREATED_AT ASC`,
+	}
+
+	// queryUpdateResourceServerInterface updates a resource server interface.
+	queryUpdateResourceServerInterface = dbmodel.DBQuery{
+		ID: "RSQ-RES_MGT-45",
+		Query: `UPDATE "RESOURCE_SERVER_INTERFACE"
+			SET TYPE = $1, IDENTIFIER = $2
+			WHERE ID = $3 AND DEPLOYMENT_ID = $4`,
+	}
+
+	// queryDeleteResourceServerInterface deletes a resource server interface.
+	queryDeleteResourceServerInterface = dbmodel.DBQuery{
+		ID:    "RSQ-RES_MGT-46",
+		Query: `DELETE FROM "RESOURCE_SERVER_INTERFACE" WHERE ID = $1 AND DEPLOYMENT_ID = $2`,
+	}
+
+	// queryCheckResourceServerInterfaceIdentifierExists checks if an interface identifier already exists.
+	queryCheckResourceServerInterfaceIdentifierExists = dbmodel.DBQuery{
+		ID: "RSQ-RES_MGT-47",
+		Query: `SELECT COUNT(*) as count FROM "RESOURCE_SERVER_INTERFACE"
 			WHERE IDENTIFIER = $1 AND DEPLOYMENT_ID = $2`,
 	}
 

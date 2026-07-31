@@ -91,7 +91,7 @@ func (s *ServiceTestSuite) newPermissiveResourceMock() *resourcemock.ResourceSer
 	m := resourcemock.NewResourceServiceInterfaceMock(s.T())
 	m.On("GetResourceServerByIdentifier", mock.Anything, mock.Anything).
 		Return(func(_ context.Context, identifier string) *providers.ResourceServer {
-			return &providers.ResourceServer{ID: identifier, Identifier: identifier}
+			return resolvedResourceServer(identifier, identifier)
 		}, func(_ context.Context, _ string) *tidcommon.ServiceError {
 			return nil
 		}).Maybe()
@@ -346,7 +346,7 @@ func (s *ServiceTestSuite) TestHandlePAR_ValidatesResourceAndStoresRawScopes() {
 
 	rsMock := resourcemock.NewResourceServiceInterfaceMock(s.T())
 	rsMock.On("GetResourceServerByIdentifier", mock.Anything, "https://api.example.com").
-		Return(&providers.ResourceServer{ID: "rs-1", Identifier: "https://api.example.com"},
+		Return(resolvedResourceServer("rs-1", "https://api.example.com"),
 			(*tidcommon.ServiceError)(nil))
 
 	svc := newPARService(store, rsMock, s.testCfg)
@@ -396,7 +396,7 @@ func (s *ServiceTestSuite) TestHandlePAR_NoResourceWithDefaultSucceedsAtPush() {
 	// Default resource server configured: resolving the empty identifier returns it.
 	rsMock := resourcemock.NewResourceServiceInterfaceMock(s.T())
 	rsMock.On("GetResourceServerByIdentifier", mock.Anything, "").
-		Return(&providers.ResourceServer{ID: "rs-default", Identifier: "https://default.example.com"},
+		Return(resolvedResourceServer("rs-default", "https://default.example.com"),
 			(*tidcommon.ServiceError)(nil))
 
 	svc := newPARService(store, rsMock, s.testCfg)
@@ -634,4 +634,14 @@ func (s *ServiceTestSuite) TestHandlePAR_MultipleResources_InvalidTarget() {
 
 	assert.Nil(s.T(), resp)
 	assert.Equal(s.T(), oauth2const.ErrorInvalidTarget, errCode)
+}
+
+func resolvedResourceServer(id, identifier string) *providers.ResourceServer {
+	return &providers.ResourceServer{
+		ID: id,
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: identifier,
+		}},
+	}
 }

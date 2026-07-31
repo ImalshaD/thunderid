@@ -24,6 +24,10 @@ export {default as useUpdateResourceServer} from './api/useUpdateResourceServer'
 export {default as useDeleteResourceServer} from './api/useDeleteResourceServer';
 export {default as useGetDefaultResourceServer} from './api/useGetDefaultResourceServer';
 export {default as useSetDefaultResourceServer} from './api/useSetDefaultResourceServer';
+export {default as useGetResourceServerInterfaces} from './api/useGetResourceServerInterfaces';
+export {default as useCreateResourceServerInterface} from './api/useCreateResourceServerInterface';
+export {default as useUpdateResourceServerInterface} from './api/useUpdateResourceServerInterface';
+export {default as useDeleteResourceServerInterface} from './api/useDeleteResourceServerInterface';
 export {default as useGetResources} from './api/useGetResources';
 export {default as useCreateResource} from './api/useCreateResource';
 export {default as useUpdateResource} from './api/useUpdateResource';
@@ -42,15 +46,23 @@ export type {SelectedScopesFieldProps} from './components/permission-catalog/Sel
 export {default as ResourceServersList} from './components/ResourceServersList';
 export {default as ResourceServerDeleteDialog} from './components/ResourceServerDeleteDialog';
 export type {ResourceServerDeleteDialogProps} from './components/ResourceServerDeleteDialog';
-export {default as SetDefaultResourceServerDialog} from './components/SetDefaultResourceServerDialog';
-export type {SetDefaultResourceServerDialogProps} from './components/SetDefaultResourceServerDialog';
+export {default as DefaultResourceServerDialog} from './components/DefaultResourceServerDialog';
+export type {DefaultResourceServerDialogProps} from './components/DefaultResourceServerDialog';
+export {default as DefaultResourceServerCard} from './components/DefaultResourceServerCard';
+export {default as ResourceServerInterfacesSection} from './components/resource-server-detail/ResourceServerInterfacesSection';
 
 // Constants
 export {default as ResourceServerQueryKeys} from './constants/resource-server-query-keys';
+export {default as deriveResourceServerType} from './utils/deriveResourceServerType';
 
 // Models
 export type {
   ResourceServer,
+  ResourceServerType,
+  ResourceServerInterface,
+  ResourceServerInterfaceType,
+  ResourceServerInterfaceRequest,
+  ResourceServerInterfaceListResponse,
   ResourceServerListResponse,
   Resource,
   ResourceListResponse,

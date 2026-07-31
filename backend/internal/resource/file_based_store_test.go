@@ -162,8 +162,8 @@ func (s *FileBasedResourceStoreTestSuite) TestCheckResourceServerNameExists_NotF
 	assert.False(s.T(), exists)
 }
 
-func (s *FileBasedResourceStoreTestSuite) TestCheckResourceServerIdentifierExists_NotFound() {
-	exists, err := s.store.CheckResourceServerIdentifierExists(s.ctx, "nonexistent")
+func (s *FileBasedResourceStoreTestSuite) TestCheckResourceServerInterfaceIdentifierExists_NotFound() {
+	exists, err := s.store.CheckResourceServerInterfaceIdentifierExists(s.ctx, "nonexistent")
 
 	assert.NoError(s.T(), err)
 	assert.False(s.T(), exists)
@@ -521,10 +521,15 @@ func (s *FileBasedResourceStoreTestSuite) TestCreateAndGetResourceServer() {
 		ID:          "rs-test",
 		Name:        "Test Server",
 		Description: "A test server",
-		Identifier:  "test-server",
 		OUID:        "ou1",
 		Delimiter:   ":",
-		Resources:   []providers.Resource{},
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:               "rsi-test",
+			ResourceServerID: "rs-test",
+			Type:             providers.ResourceServerInterfaceTypeAPI,
+			Identifier:       "https://api.example.com/test",
+		}},
+		Resources: []providers.Resource{},
 	}
 
 	fileStore, ok := s.store.(*fileBasedResourceStore)
@@ -538,7 +543,8 @@ func (s *FileBasedResourceStoreTestSuite) TestCreateAndGetResourceServer() {
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), "rs-test", rs.ID)
 	assert.Equal(s.T(), "Test Server", rs.Name)
-	assert.Equal(s.T(), "test-server", rs.Identifier)
+	assert.Len(s.T(), rs.Interfaces, 1)
+	assert.Equal(s.T(), "https://api.example.com/test", rs.Interfaces[0].Identifier)
 }
 
 func (s *FileBasedResourceStoreTestSuite) TestGetResourceServerList_WithData() {
@@ -613,28 +619,33 @@ func (s *FileBasedResourceStoreTestSuite) TestCheckResourceServerNameExists_With
 	assert.False(s.T(), exists)
 }
 
-func (s *FileBasedResourceStoreTestSuite) TestCheckResourceServerIdentifierExists_WithData() {
+func (s *FileBasedResourceStoreTestSuite) TestCheckResourceServerInterfaceIdentifierExists_WithData() {
 	fileStore, ok := s.store.(*fileBasedResourceStore)
 	assert.True(s.T(), ok)
 
 	rs := &providers.ResourceServer{
-		ID:         "rs-test",
-		Name:       "Test Server",
-		Identifier: "unique-identifier",
-		OUID:       "ou1",
-		Delimiter:  ":",
+		ID:        "rs-test",
+		Name:      "Test Server",
+		OUID:      "ou1",
+		Delimiter: ":",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:               "rsi-test",
+			ResourceServerID: "rs-test",
+			Type:             providers.ResourceServerInterfaceTypeAPI,
+			Identifier:       "unique-identifier",
+		}},
 	}
 
 	err := fileStore.Create("rs-test", rs)
 	assert.NoError(s.T(), err)
 
 	// Check existing identifier
-	exists, err := s.store.CheckResourceServerIdentifierExists(s.ctx, "unique-identifier")
+	exists, err := s.store.CheckResourceServerInterfaceIdentifierExists(s.ctx, "unique-identifier")
 	assert.NoError(s.T(), err)
 	assert.True(s.T(), exists)
 
 	// Check non-existing identifier
-	exists, err = s.store.CheckResourceServerIdentifierExists(s.ctx, "non-existent")
+	exists, err = s.store.CheckResourceServerInterfaceIdentifierExists(s.ctx, "non-existent")
 	assert.NoError(s.T(), err)
 	assert.False(s.T(), exists)
 }

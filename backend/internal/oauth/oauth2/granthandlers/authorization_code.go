@@ -159,7 +159,7 @@ func (h *authorizationCodeGrantHandler) HandleGrant(ctx context.Context, tokenRe
 		if dErr != nil {
 			return nil, dErr
 		}
-		accessTokenAudiences = []string{targetRS.Identifier}
+		accessTokenAudiences = []string{resourceindicators.SelectedAudience(targetRS)}
 		accessTokenScopes = make([]string, 0, len(oidcScopes)+len(downscopedNonOidc))
 		accessTokenScopes = append(accessTokenScopes, oidcScopes...)
 		accessTokenScopes = append(accessTokenScopes, downscopedNonOidc...)

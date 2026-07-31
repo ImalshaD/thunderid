@@ -144,8 +144,11 @@ func (s *cibaService) InitiateBackchannelAuth(
 			return nil, &CIBAError{Code: dErr.Error, Message: dErr.ErrorDescription}
 		}
 		permissionScopes = downscoped
-		effectiveResources = []string{targetRS.Identifier}
-		resourceServerIdentifier = targetRS.Identifier
+		// Pin the request to the interface identifier that was selected, so the CIBA callback and
+		// token issuance reissue the same audience instead of re-resolving a default.
+		selectedAudience := resourceindicators.SelectedAudience(targetRS)
+		effectiveResources = []string{selectedAudience}
+		resourceServerIdentifier = selectedAudience
 	}
 	cacheTTL := strconv.FormatInt(s.resolveUserAttributesCacheTTL(oauthApp), 10)
 

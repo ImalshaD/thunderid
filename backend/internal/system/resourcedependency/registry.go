@@ -97,7 +97,12 @@ const (
 	ResourceTypeNotificationSender = "notificationSender"
 	ResourceTypeOU                 = "organizationUnit"
 	ResourceTypeResourceServer     = "resourceServer"
-	ResourceTypeResource           = "resource"
+	// ResourceTypeResourceServerInterface identifies a resource server interface, whose identifier is
+	// an access token audience. Server configuration may reference one as the deployment default.
+	ResourceTypeResourceServerInterface = "resourceServerInterface"
+	ResourceTypeResource                = "resource"
+	// ResourceTypeServerConfig identifies a server configuration section holding a reference.
+	ResourceTypeServerConfig = "serverConfig"
 )
 
 // SummarizeBlockingUsages renders a deterministic, human-readable summary of blocking dependencies

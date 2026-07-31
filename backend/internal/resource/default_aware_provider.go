@@ -31,49 +31,66 @@ import (
 // is a server-side policy: the authentication engine and OAuth layers depend only on
 // providers.ResourceServerProvider and never see the server-config store.
 type defaultAwareResourceServerProvider struct {
-	providers.ResourceServerProvider
+	ResourceServiceInterface
 	serverConfigService serverconfig.ServerConfigService
 }
 
 var _ providers.ResourceServerProvider = (*defaultAwareResourceServerProvider)(nil)
 
-// NewDefaultAwareResourceServerProvider wraps base so that GetResourceServerByIdentifier resolves the
-// configured default resource server when the identifier is empty. base and serverConfigService must
-// both be non-nil.
+// NewDefaultAwareResourceServerProvider wraps resourceService so that GetResourceServerByIdentifier
+// resolves the resource server owning the configured default interface when the identifier is empty.
+// resourceService and serverConfigService must both be non-nil.
 func NewDefaultAwareResourceServerProvider(
-	base providers.ResourceServerProvider,
+	resourceService ResourceServiceInterface,
 	serverConfigService serverconfig.ServerConfigService,
 ) providers.ResourceServerProvider {
-	if base == nil {
-		panic("default-aware resource server provider requires a non-nil base provider")
+	if resourceService == nil {
+		panic("default-aware resource server provider requires a non-nil resource service")
 	}
 	if serverConfigService == nil {
 		panic("default-aware resource server provider requires a non-nil server config service")
 	}
 	return &defaultAwareResourceServerProvider{
-		ResourceServerProvider: base,
-		serverConfigService:    serverConfigService,
+		ResourceServiceInterface: resourceService,
+		serverConfigService:      serverConfigService,
 	}
 }
 
 // GetResourceServerByIdentifier resolves an explicit identifier through the wrapped provider. When the
-// identifier is empty it resolves the deployment's configured default resource server: a client error
+// identifier is empty it resolves the deployment's configured default interface: a client error
 // when no default is configured (or the merged config is malformed), and a server error when the
 // configuration cannot be read.
+//
+// Either way the returned resource server carries exactly the interface that selected it, so callers
+// bind the access-token audience to that interface identifier while authorizing against the resource
+// server itself.
 func (p *defaultAwareResourceServerProvider) GetResourceServerByIdentifier(
 	ctx context.Context, identifier string,
 ) (*providers.ResourceServer, *tidcommon.ServiceError) {
 	if identifier != "" {
-		return p.ResourceServerProvider.GetResourceServerByIdentifier(ctx, identifier)
+		return p.ResourceServiceInterface.GetResourceServerByIdentifier(ctx, identifier)
 	}
 	merged, svcErr := p.serverConfigService.GetMergedConfig(
-		ctx, string(serverconfig.ConfigNameDefaultResourceServer))
+		ctx, string(serverconfig.ConfigNameDefaultResourceServerInterface))
 	if svcErr != nil {
 		return nil, svcErr
 	}
-	cfg, _ := merged.(DefaultResourceServerConfig)
-	if cfg.ResourceServerID == "" {
+	cfg, _ := merged.(DefaultResourceServerInterfaceConfig)
+	if cfg.ResourceServerInterfaceID == "" {
 		return nil, &ErrorResourceServerNotFound
 	}
-	return p.ResourceServerProvider.GetResourceServer(ctx, cfg.ResourceServerID)
+	defaultInterface, svcErr := p.ResourceServiceInterface.GetResourceServerInterfaceByID(
+		ctx, cfg.ResourceServerInterfaceID)
+	if svcErr != nil {
+		return nil, svcErr
+	}
+	resourceServer, svcErr := p.ResourceServiceInterface.GetResourceServer(
+		ctx, defaultInterface.ResourceServerID)
+	if svcErr != nil {
+		return nil, svcErr
+	}
+
+	narrowed := *resourceServer
+	narrowed.Interfaces = []providers.ResourceServerInterface{*defaultInterface}
+	return &narrowed, nil
 }

@@ -127,10 +127,6 @@ vi.mock('../../api/useGetDefaultResourceServer', () => ({
   default: () => mockUseGetDefaultResourceServer() as {data: unknown},
 }));
 
-vi.mock('../../components/SetDefaultResourceServerDialog', () => ({
-  default: () => null,
-}));
-
 vi.mock('../../api/useGetResources', () => ({
   default: () => ({data: {resources: [], totalResults: 0, startIndex: 0, count: 0}, isLoading: false}),
 }));
@@ -147,31 +143,21 @@ vi.mock('../../components/resource-tree/ResourceTree', () => ({
   default: () => <div data-testid="resource-tree" />,
 }));
 
-vi.mock('../../components/resource-server-detail/AdvancedTab', () => ({
-  default: ({identifier, onIdentifierChange}: {identifier: string; onIdentifierChange: (value: string) => void}) => (
-    <div data-testid="advanced-tab">
-      <input aria-label="Identifier" value={identifier} onChange={(e) => onIdentifierChange(e.target.value)} />
-    </div>
-  ),
+vi.mock('../../components/resource-server-detail/ResourceServerInterfacesSection', () => ({
+  default: () => <div data-testid="interfaces-section" />,
 }));
 
 const mockResourceServer: ResourceServer = {
   id: 'rs-1',
   name: 'Dark Dodos Smash',
-  identifier: 'https://api.example.com',
   ouId: 'ou-1',
   delimiter: '/',
-  type: 'API',
+  interfaces: [{id: 'rsi-1', type: 'API', identifier: 'https://api.example.com'}],
 };
 
 const readOnlyResourceServer: ResourceServer = {
   ...mockResourceServer,
   isReadOnly: true,
-};
-
-const mockMcpResourceServer: ResourceServer = {
-  ...mockResourceServer,
-  type: 'MCP',
 };
 
 describe('ResourceServerEditPage', () => {
@@ -238,13 +224,13 @@ describe('ResourceServerEditPage', () => {
     expect(screen.getByTestId('resource-tree')).toBeInTheDocument();
   });
 
-  it('shows the AdvancedTab when the Advanced Settings tab is clicked', async () => {
+  it('shows the interfaces section when the Interfaces tab is clicked', async () => {
     renderWithProviders(<ResourceServerEditPage />);
 
-    fireEvent.click(screen.getByRole('tab', {name: 'Advanced Settings'}));
+    fireEvent.click(screen.getByRole('tab', {name: 'Interfaces'}));
 
     await waitFor(() => {
-      expect(screen.getByTestId('advanced-tab')).toBeInTheDocument();
+      expect(screen.getByTestId('interfaces-section')).toBeInTheDocument();
     });
   });
 
@@ -286,130 +272,14 @@ describe('ResourceServerEditPage', () => {
     expect(screen.getByText(/This resource is read-only and cannot be modified/i)).toBeInTheDocument();
   });
 
-  it('shows the unsaved changes bar when the identifier is edited in the Advanced tab', async () => {
-    renderWithProviders(<ResourceServerEditPage />);
-
-    fireEvent.click(screen.getByRole('tab', {name: 'Advanced Settings'}));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('advanced-tab')).toBeInTheDocument();
-    });
-
-    fireEvent.change(screen.getByLabelText('Identifier'), {target: {value: 'https://new-api.example.com'}});
-
-    await waitFor(() => {
-      expect(screen.getByTestId('unsaved-changes-bar')).toBeInTheDocument();
-    });
-  });
-
-  it('includes the edited identifier when Save is clicked from the unsaved changes bar', async () => {
-    renderWithProviders(<ResourceServerEditPage />);
-
-    fireEvent.click(screen.getByRole('tab', {name: 'Advanced Settings'}));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('advanced-tab')).toBeInTheDocument();
-    });
-
-    fireEvent.change(screen.getByLabelText('Identifier'), {target: {value: 'https://new-api.example.com'}});
-
-    await waitFor(() => {
-      expect(screen.getByTestId('unsaved-changes-bar')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
-
-    expect(mockUpdateMutate).toHaveBeenCalledWith(
-      {
-        id: 'rs-1',
-        data: {
-          name: 'Dark Dodos Smash',
-          description: null,
-          identifier: 'https://new-api.example.com',
-          ouId: 'ou-1',
-        },
-      },
-      expect.any(Object),
-    );
-  });
-
-  it('does not save when the identifier is cleared', async () => {
-    renderWithProviders(<ResourceServerEditPage />);
-
-    fireEvent.click(screen.getByRole('tab', {name: 'Advanced Settings'}));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('advanced-tab')).toBeInTheDocument();
-    });
-
-    fireEvent.change(screen.getByLabelText('Identifier'), {target: {value: '   '}});
-
-    await waitFor(() => {
-      expect(screen.getByTestId('unsaved-changes-bar')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
-
-    expect(mockUpdateMutate).not.toHaveBeenCalled();
-  });
-
-  it('renders the MCP-specific Danger Zone title for an MCP server', () => {
-    mockUseGetResourceServer.mockReturnValue({
-      data: mockMcpResourceServer,
-      isLoading: false,
-      error: null,
-      refetch: mockRefetch,
-    });
-
-    renderWithProviders(<ResourceServerEditPage />);
-
-    expect(screen.getByRole('heading', {name: 'Delete MCP server'})).toBeInTheDocument();
-  });
-
-  it('renders the MCP-specific Danger Zone description for an MCP server', () => {
-    mockUseGetResourceServer.mockReturnValue({
-      data: mockMcpResourceServer,
-      isLoading: false,
-      error: null,
-      refetch: mockRefetch,
-    });
-
-    renderWithProviders(<ResourceServerEditPage />);
-
-    expect(
-      screen.getByText('Permanently delete this MCP server and all associated data. This action cannot be undone.'),
-    ).toBeInTheDocument();
-  });
-
-  it('renders the MCP-specific delete button label for an MCP server', () => {
-    mockUseGetResourceServer.mockReturnValue({
-      data: mockMcpResourceServer,
-      isLoading: false,
-      error: null,
-      refetch: mockRefetch,
-    });
-
-    renderWithProviders(<ResourceServerEditPage />);
-
-    expect(screen.getByRole('button', {name: 'Delete MCP server'})).toBeInTheDocument();
-  });
-
-  it('shows the Set as default button when the server is not the default', () => {
-    renderWithProviders(<ResourceServerEditPage />);
-
-    expect(screen.getByRole('button', {name: 'Set as default'})).toBeInTheDocument();
-    expect(screen.queryByText('Default resource server')).not.toBeInTheDocument();
-  });
-
   it('shows the Default resource server badge when the server is the default', () => {
     mockUseGetDefaultResourceServer.mockReturnValue({
-      data: {readOnly: {}, writable: {}, merged: {resourceServerId: 'rs-1'}},
+      data: {readOnly: {}, writable: {}, merged: {resourceServerInterfaceId: 'rsi-1'}},
     });
 
     renderWithProviders(<ResourceServerEditPage />);
 
     expect(screen.getByText('Default resource server')).toBeInTheDocument();
-    expect(screen.queryByRole('button', {name: 'Set as default'})).not.toBeInTheDocument();
   });
 
   it('renders neither the badge nor the action while the default config is loading', () => {
@@ -417,30 +287,21 @@ describe('ResourceServerEditPage', () => {
 
     renderWithProviders(<ResourceServerEditPage />);
 
-    expect(screen.queryByRole('button', {name: 'Set as default'})).not.toBeInTheDocument();
-    expect(screen.queryByText('Default resource server')).not.toBeInTheDocument();
-  });
-
-  it('does not offer Set as default when the default is locked by declarative config', () => {
-    mockUseGetDefaultResourceServer.mockReturnValue({
-      data: {readOnly: {resourceServerId: 'rs-9'}, writable: {}, merged: {resourceServerId: 'rs-9'}},
-    });
-
-    renderWithProviders(<ResourceServerEditPage />);
-
-    expect(screen.queryByRole('button', {name: 'Set as default'})).not.toBeInTheDocument();
     expect(screen.queryByText('Default resource server')).not.toBeInTheDocument();
   });
 
   it('shows the badge but no action for a locked default server', () => {
     mockUseGetDefaultResourceServer.mockReturnValue({
-      data: {readOnly: {resourceServerId: 'rs-1'}, writable: {}, merged: {resourceServerId: 'rs-1'}},
+      data: {
+        readOnly: {resourceServerInterfaceId: 'rsi-1'},
+        writable: {},
+        merged: {resourceServerInterfaceId: 'rsi-1'},
+      },
     });
 
     renderWithProviders(<ResourceServerEditPage />);
 
     expect(screen.getByText('Default resource server')).toBeInTheDocument();
-    expect(screen.queryByRole('button', {name: 'Set as default'})).not.toBeInTheDocument();
   });
 
   it('shows the name text field when the edit icon button is clicked', async () => {

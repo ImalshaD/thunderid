@@ -395,8 +395,11 @@ func (as *authorizeService) initiateFlowAndStoreRequest(
 			}
 		}
 		oauthParams.PermissionScopes = downscoped
-		oauthParams.Resources = []string{targetRS.Identifier}
-		resourceServerIdentifier = targetRS.Identifier
+		// Pin the request to the interface identifier that was selected, so the authorization code
+		// and every later grant reissue the same audience instead of re-resolving a default.
+		selectedAudience := resourceindicators.SelectedAudience(targetRS)
+		oauthParams.Resources = []string{selectedAudience}
+		resourceServerIdentifier = selectedAudience
 	}
 
 	effectiveAcrValues := requestvalidator.ResolveACRValues(oauthParams.AcrValues, app.AcrValues)

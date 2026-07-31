@@ -84,10 +84,12 @@ func (h *resourceHandler) HandleResourceServerPostRequest(w http.ResponseWriter,
 	serviceReq := providers.ResourceServer{
 		Name:        sanitized.Name,
 		Description: sanitized.Description,
-		Identifier:  sanitized.Identifier,
-		Type:        sanitized.Type,
 		OUID:        sanitized.OUID,
 		Delimiter:   sanitized.Delimiter,
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       sanitized.Interface.Type,
+			Identifier: sanitized.Interface.Identifier,
+		}},
 	}
 
 	result, svcErr := h.resourceService.CreateResourceServer(ctx, serviceReq)
@@ -133,7 +135,6 @@ func (h *resourceHandler) HandleResourceServerPutRequest(w http.ResponseWriter, 
 	serviceReq := providers.ResourceServer{
 		Name:        sanitized.Name,
 		Description: sanitized.Description,
-		Identifier:  sanitized.Identifier,
 		OUID:        sanitized.OUID,
 	}
 
@@ -153,6 +154,115 @@ func (h *resourceHandler) HandleResourceServerDeleteRequest(w http.ResponseWrite
 	id := r.PathValue("id")
 	svcErr := h.resourceService.DeleteResourceServer(ctx, id)
 	if svcErr != nil {
+		handleError(ctx, w, svcErr)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Resource Server Interface Handlers
+
+// HandleResourceServerInterfaceListRequest handles listing the interfaces of a resource server.
+func (h *resourceHandler) HandleResourceServerInterfaceListRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rsID := r.PathValue("rsId")
+
+	interfaces, svcErr := h.resourceService.GetResourceServerInterfaceList(ctx, rsID)
+	if svcErr != nil {
+		handleError(ctx, w, svcErr)
+		return
+	}
+
+	response := ResourceServerInterfaceListResponse{
+		TotalResults: len(interfaces),
+		Interfaces:   make([]ResourceServerInterfaceResponse, len(interfaces)),
+	}
+	for i := range interfaces {
+		response.Interfaces[i] = *toResourceServerInterfaceResponse(&interfaces[i])
+	}
+
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, response)
+}
+
+// HandleResourceServerInterfacePostRequest handles adding an interface to a resource server.
+func (h *resourceHandler) HandleResourceServerInterfacePostRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rsID := r.PathValue("rsId")
+	req, err := sysutils.DecodeJSONBody[ResourceServerInterfaceRequest](r)
+	if err != nil {
+		var valErr *sysutils.ValidationError
+		if errors.As(err, &valErr) {
+			sysutils.WriteStructuredErrorResponse(w, http.StatusBadRequest, "Validation Failed", valErr.Errors)
+			return
+		}
+		handleError(ctx, w, &ErrorInvalidRequestFormat)
+		return
+	}
+
+	sanitized := sanitizeResourceServerInterfaceRequest(req)
+	result, svcErr := h.resourceService.CreateResourceServerInterface(ctx, rsID,
+		providers.ResourceServerInterface{Type: sanitized.Type, Identifier: sanitized.Identifier})
+	if svcErr != nil {
+		handleError(ctx, w, svcErr)
+		return
+	}
+
+	response := toResourceServerInterfaceResponse(result)
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusCreated, response)
+}
+
+// HandleResourceServerInterfaceGetRequest handles getting an interface of a resource server.
+func (h *resourceHandler) HandleResourceServerInterfaceGetRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rsID := r.PathValue("rsId")
+	id := r.PathValue("id")
+
+	result, svcErr := h.resourceService.GetResourceServerInterface(ctx, rsID, id)
+	if svcErr != nil {
+		handleError(ctx, w, svcErr)
+		return
+	}
+
+	response := toResourceServerInterfaceResponse(result)
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, response)
+}
+
+// HandleResourceServerInterfacePutRequest handles updating an interface of a resource server.
+func (h *resourceHandler) HandleResourceServerInterfacePutRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rsID := r.PathValue("rsId")
+	id := r.PathValue("id")
+	req, err := sysutils.DecodeJSONBody[ResourceServerInterfaceRequest](r)
+	if err != nil {
+		var valErr *sysutils.ValidationError
+		if errors.As(err, &valErr) {
+			sysutils.WriteStructuredErrorResponse(w, http.StatusBadRequest, "Validation Failed", valErr.Errors)
+			return
+		}
+		handleError(ctx, w, &ErrorInvalidRequestFormat)
+		return
+	}
+
+	sanitized := sanitizeResourceServerInterfaceRequest(req)
+	result, svcErr := h.resourceService.UpdateResourceServerInterface(ctx, rsID, id,
+		providers.ResourceServerInterface{Type: sanitized.Type, Identifier: sanitized.Identifier})
+	if svcErr != nil {
+		handleError(ctx, w, svcErr)
+		return
+	}
+
+	response := toResourceServerInterfaceResponse(result)
+	sysutils.WriteSuccessResponse(ctx, w, http.StatusOK, response)
+}
+
+// HandleResourceServerInterfaceDeleteRequest handles deleting an interface of a resource server.
+func (h *resourceHandler) HandleResourceServerInterfaceDeleteRequest(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	rsID := r.PathValue("rsId")
+	id := r.PathValue("id")
+
+	if svcErr := h.resourceService.DeleteResourceServerInterface(ctx, rsID, id); svcErr != nil {
 		handleError(ctx, w, svcErr)
 		return
 	}
@@ -587,7 +697,8 @@ func handleError(ctx context.Context, w http.ResponseWriter, svcErr *tidcommon.S
 	statusCode := http.StatusInternalServerError
 	if svcErr.Type == tidcommon.ClientErrorType {
 		switch svcErr.Code {
-		case ErrorResourceServerNotFound.Code, ErrorResourceNotFound.Code, ErrorActionNotFound.Code:
+		case ErrorResourceServerNotFound.Code, ErrorResourceServerInterfaceNotFound.Code,
+			ErrorResourceNotFound.Code, ErrorActionNotFound.Code:
 			statusCode = http.StatusNotFound
 		case ErrorNameConflict.Code, ErrorHandleConflict.Code, ErrorIdentifierConflict.Code:
 			statusCode = http.StatusConflict
@@ -612,10 +723,9 @@ func sanitizeCreateResourceServerRequest(req *CreateResourceServerRequest) Creat
 	return CreateResourceServerRequest{
 		Name:        sysutils.SanitizeString(req.Name),
 		Description: sysutils.SanitizeString(req.Description),
-		Identifier:  sysutils.SanitizeString(req.Identifier),
-		Type:        req.Type,
 		OUID:        sysutils.SanitizeString(req.OUID),
 		Delimiter:   sysutils.SanitizeString(req.Delimiter),
+		Interface:   sanitizeResourceServerInterfaceRequest(&req.Interface),
 	}
 }
 
@@ -624,7 +734,6 @@ func sanitizeUpdateResourceServerRequest(req *UpdateResourceServerRequest) Updat
 	return UpdateResourceServerRequest{
 		Name:        sysutils.SanitizeString(req.Name),
 		Description: sysutils.SanitizeString(req.Description),
-		Identifier:  sysutils.SanitizeString(req.Identifier),
 		OUID:        sysutils.SanitizeString(req.OUID),
 	}
 }
@@ -674,29 +783,54 @@ func sanitizeUpdateActionRequest(req *UpdateActionRequest) UpdateActionRequest {
 
 // Response transformation functions
 
+// sanitizeResourceServerInterfaceRequest sanitizes input for creating or updating an interface.
+func sanitizeResourceServerInterfaceRequest(
+	req *ResourceServerInterfaceRequest,
+) ResourceServerInterfaceRequest {
+	return ResourceServerInterfaceRequest{
+		Type:       req.Type,
+		Identifier: sysutils.SanitizeString(req.Identifier),
+	}
+}
+
 // toResourceServerResponse transforms a providers.ResourceServer to ResourceServerResponse.
-func toResourceServerResponse(rs *providers.ResourceServer) *ResourceServerResponse {
-	resType := rs.Type
-	if resType == "" {
-		resType = providers.ResourceServerTypeCustom
+func toResourceServerResponse(
+	rs *providers.ResourceServer,
+) *ResourceServerResponse {
+	interfaces := make([]ResourceServerInterfaceResponse, len(rs.Interfaces))
+	for i := range rs.Interfaces {
+		interfaces[i] = *toResourceServerInterfaceResponse(&rs.Interfaces[i])
 	}
 	return &ResourceServerResponse{
 		ID:          rs.ID,
 		Name:        rs.Name,
 		Description: rs.Description,
-		Identifier:  rs.Identifier,
-		Type:        resType,
 		OUID:        rs.OUID,
 		Delimiter:   rs.Delimiter,
+		Interfaces:  interfaces,
 		IsReadOnly:  rs.IsReadOnly,
 	}
 }
 
+// toResourceServerInterfaceResponse transforms an interface to its response.
+func toResourceServerInterfaceResponse(
+	rsi *providers.ResourceServerInterface,
+) *ResourceServerInterfaceResponse {
+	return &ResourceServerInterfaceResponse{
+		ID:         rsi.ID,
+		Type:       rsi.Type,
+		Identifier: rsi.Identifier,
+		IsReadOnly: rsi.IsReadOnly,
+	}
+}
+
 // toResourceServerListResponse transforms a ResourceServerList to ResourceServerListResponse.
-func toResourceServerListResponse(list *ResourceServerList) *ResourceServerListResponse {
+func toResourceServerListResponse(
+	list *ResourceServerList,
+) *ResourceServerListResponse {
 	resourceServers := make([]ResourceServerResponse, len(list.ResourceServers))
-	for i, rs := range list.ResourceServers {
-		resourceServers[i] = *toResourceServerResponse(&rs)
+	for i := range list.ResourceServers {
+		resourceServers[i] = *toResourceServerResponse(&list.ResourceServers[i])
 	}
 
 	links := make([]LinkResponse, len(list.Links))

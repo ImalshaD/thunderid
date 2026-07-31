@@ -242,7 +242,7 @@ describe('CreateResourceServerPage', () => {
     });
   });
 
-  it('sends the identifier in the create payload', async () => {
+  it('sends the identifier as the initial interface for an API resource server', async () => {
     renderWithProviders(<CreateResourceServerPage />);
 
     fireEvent.click(screen.getByRole('button', {name: /API/i}));
@@ -268,10 +268,46 @@ describe('CreateResourceServerPage', () => {
     fireEvent.click(screen.getByRole('button', {name: /Create resource server/i}));
 
     expect(mockCreateResourceServerMutate).toHaveBeenCalledWith(
-      expect.objectContaining({name: 'Payments API', identifier: 'https://api.example.com'}),
+      expect.objectContaining({
+        name: 'Payments API',
+        interface: {type: 'API', identifier: 'https://api.example.com'},
+      }),
       expect.any(Object),
     );
     expect(mockCreateResourceServerMutate.mock.calls[0][0]).not.toHaveProperty('handle');
+    expect(mockCreateResourceServerMutate.mock.calls[0][0]).not.toHaveProperty('identifier');
+  });
+
+  // A Custom resource server is created with no interface: it defines permissions and gains an
+  // audience later from the Interfaces tab, so the wizard never asks for an identifier.
+  it('omits the interface and the identifier field for a Custom resource server', async () => {
+    renderWithProviders(<CreateResourceServerPage />);
+
+    fireEvent.click(screen.getByRole('button', {name: /Custom/i}));
+    fireEvent.click(screen.getByRole('button', {name: /Continue/i}));
+
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', {name: /resource server name/i})).toBeInTheDocument();
+    });
+
+    expect(screen.queryByRole('textbox', {name: /identifier/i})).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', {name: /resource server name/i}), {
+      target: {value: 'Invoices'},
+    });
+    fireEvent.click(screen.getByRole('button', {name: /Continue/i}));
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', {name: /Create resource server/i})).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', {name: /Create resource server/i}));
+
+    expect(mockCreateResourceServerMutate).toHaveBeenCalledWith(
+      expect.objectContaining({name: 'Invoices'}),
+      expect.any(Object),
+    );
+    expect(mockCreateResourceServerMutate.mock.calls[0][0]).not.toHaveProperty('interface');
   });
 
   it('shows the MCP server created success toast after a successful MCP server creation', async () => {

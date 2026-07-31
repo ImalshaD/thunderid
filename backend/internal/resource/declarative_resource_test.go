@@ -134,9 +134,14 @@ func (s *ResourceServerExporterTestSuite) TestGetResourceByID_Success() {
 		ID:          serverID,
 		Name:        "Test Server",
 		Description: "A test server",
-		Identifier:  "test-server",
 		OUID:        "ou1",
 		Delimiter:   ":",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:               "rsi1",
+			ResourceServerID: serverID,
+			Type:             providers.ResourceServerInterfaceTypeAPI,
+			Identifier:       "https://api.example.com/test",
+		}},
 	}
 
 	resources := []providers.Resource{
@@ -192,12 +197,16 @@ func (s *ResourceServerExporterTestSuite) TestGetResourceByID_MCPExportImportRou
 	serverID := "rs-mcp"
 
 	server := &providers.ResourceServer{
-		ID:         serverID,
-		Name:       "Booking MCP",
-		Identifier: "booking-mcp",
-		Type:       providers.ResourceServerTypeMCP,
-		OUID:       "ou1",
-		Delimiter:  ":",
+		ID:        serverID,
+		Name:      "Booking MCP",
+		OUID:      "ou1",
+		Delimiter: ":",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:               "rsi-mcp",
+			ResourceServerID: serverID,
+			Type:             providers.ResourceServerInterfaceTypeMCP,
+			Identifier:       "https://booking.example.com/mcp",
+		}},
 	}
 
 	resources := []providers.Resource{
@@ -237,15 +246,17 @@ func (s *ResourceServerExporterTestSuite) TestGetResourceByID_MCPExportImportRou
 	assert.True(s.T(), ok)
 
 	// Marshal the exported DTO to YAML, then re-import it. This guards the export->import
-	// lossless guarantee: type must survive so the kind-vs-type import validation
-	// accepts the nested action carrying a kind.
+	// lossless guarantee: the interfaces must survive so the re-imported resource server keeps
+	// its MCP audience identifier.
 	yamlBytes, marshalErr := yaml.Marshal(dto)
 	assert.NoError(s.T(), marshalErr)
 
 	imported, parseErr := parseToResourceServer(yamlBytes)
 	s.Require().NoError(parseErr)
 	s.Require().NotNil(imported)
-	assert.Equal(s.T(), providers.ResourceServerTypeMCP, imported.Type)
+	s.Require().Len(imported.Interfaces, 1)
+	assert.Equal(s.T(), providers.ResourceServerInterfaceTypeMCP, imported.Interfaces[0].Type)
+	assert.Equal(s.T(), "https://booking.example.com/mcp", imported.Interfaces[0].Identifier)
 	assert.Len(s.T(), imported.Resources, 1)
 	assert.Len(s.T(), imported.Resources[0].Actions, 1)
 	assert.Equal(s.T(), providers.ActionKindTool, imported.Resources[0].Actions[0].Kind)
@@ -313,9 +324,12 @@ func TestParseToResourceServer(t *testing.T) {
 id: "rs1"
 name: "Test Server"
 description: "Test description"
-identifier: "test-server"
 ouId: "ou1"
 delimiter: ":"
+interfaces:
+  - id: "rsi1"
+    type: "API"
+    identifier: "test-server"
 resources:
   - name: "Users"
     handle: "users"
@@ -331,7 +345,8 @@ resources:
 	assert.NotNil(t, dto)
 	assert.Equal(t, "rs1", dto.ID)
 	assert.Equal(t, "Test Server", dto.Name)
-	assert.Equal(t, "test-server", dto.Identifier)
+	assert.Len(t, dto.Interfaces, 1)
+	assert.Equal(t, "test-server", dto.Interfaces[0].Identifier)
 	assert.Equal(t, "ou1", dto.OUID)
 	assert.Equal(t, ":", dto.Delimiter)
 	assert.Len(t, dto.Resources, 1)
@@ -365,22 +380,26 @@ ouId: "ou1"
 	assert.Contains(t, err.Error(), "name cannot be empty")
 }
 
-func TestParseToResourceServer_TypeMCP(t *testing.T) {
+func TestParseToResourceServer_InterfaceTypeMCP(t *testing.T) {
 	yamlData := []byte(`
 id: "rs1"
 name: "Test Server"
-type: "MCP"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "MCP"
+    identifier: "https://api.example.com/rs1"
 `)
 
 	dto, err := parseToResourceServer(yamlData)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, dto)
-	assert.Equal(t, providers.ResourceServerTypeMCP, dto.Type)
+	assert.Len(t, dto.Interfaces, 1)
+	assert.Equal(t, providers.ResourceServerInterfaceTypeMCP, dto.Interfaces[0].Type)
 }
 
-func TestParseToResourceServer_TypeDefaultsToCustom(t *testing.T) {
+func TestParseToResourceServer_MissingInterfacesRejected(t *testing.T) {
 	yamlData := []byte(`
 id: "rs1"
 name: "Test Server"
@@ -389,17 +408,39 @@ ouId: "ou1"
 
 	dto, err := parseToResourceServer(yamlData)
 
-	assert.NoError(t, err)
-	assert.NotNil(t, dto)
-	assert.Equal(t, providers.ResourceServerTypeCustom, dto.Type)
+	assert.Error(t, err)
+	assert.Nil(t, dto)
+	assert.Contains(t, err.Error(), "must declare at least one interface")
 }
 
-func TestParseToResourceServer_InvalidType(t *testing.T) {
+func TestParseToResourceServer_RejectsEmptyInterfaceIdentifier(t *testing.T) {
+	// An identifier is an audience, so any non-empty value is accepted; only an empty one is rejected.
 	yamlData := []byte(`
 id: "rs1"
 name: "Test Server"
-type: "BOGUS"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "API"
+    identifier: ""
+`)
+
+	dto, err := parseToResourceServer(yamlData)
+
+	assert.Error(t, err)
+	assert.Nil(t, dto)
+	assert.Contains(t, err.Error(), "identifier cannot be empty")
+}
+
+func TestParseToResourceServer_InvalidInterfaceType(t *testing.T) {
+	yamlData := []byte(`
+id: "rs1"
+name: "Test Server"
+ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "BOGUS"
+    identifier: "https://api.example.com/rs1"
 `)
 
 	dto, err := parseToResourceServer(yamlData)
@@ -409,12 +450,15 @@ ouId: "ou1"
 	assert.Contains(t, err.Error(), "invalid type")
 }
 
-func TestParseToResourceServer_MCPActionDefaultsKindToTool(t *testing.T) {
+func TestParseToResourceServer_ActionKindNotDefaulted(t *testing.T) {
 	yamlData := []byte(`
 id: "rs1"
 name: "Test Server"
-type: "MCP"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "MCP"
+    identifier: "https://api.example.com/rs1"
 resources:
   - name: "Users"
     handle: "users"
@@ -427,15 +471,18 @@ resources:
 
 	assert.NoError(t, err)
 	assert.NotNil(t, dto)
-	assert.Equal(t, providers.ActionKindTool, dto.Resources[0].Actions[0].Kind)
+	assert.Equal(t, providers.ActionKind(""), dto.Resources[0].Actions[0].Kind)
 }
 
 func TestParseToResourceServer_MCPActionWithKindSucceeds(t *testing.T) {
 	yamlData := []byte(`
 id: "rs1"
 name: "Test Server"
-type: "MCP"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "MCP"
+    identifier: "https://api.example.com/rs1"
 resources:
   - name: "Users"
     handle: "users"
@@ -460,8 +507,11 @@ func TestParseToResourceServer_NonMCPActionAllowsKind(t *testing.T) {
 	yamlData := []byte(`
 id: "rs1"
 name: "Test Server"
-type: "API"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "API"
+    identifier: "https://api.example.com/rs1"
 resources:
   - name: "Users"
     handle: "users"
@@ -482,8 +532,11 @@ func TestParseToResourceServer_NonMCPActionNoKindStaysEmpty(t *testing.T) {
 	yamlData := []byte(`
 id: "rs1"
 name: "Test Server"
-type: "CUSTOM"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "API"
+    identifier: "https://api.example.com/rs1"
 resources:
   - name: "Users"
     handle: "users"
@@ -503,8 +556,11 @@ func TestParseToResourceServer_ActionInvalidKindRejected(t *testing.T) {
 	yamlData := []byte(`
 id: "rs1"
 name: "Test Server"
-type: "MCP"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "MCP"
+    identifier: "https://api.example.com/rs1"
 resources:
   - name: "Users"
     handle: "users"
@@ -527,8 +583,11 @@ func TestParseAndValidateResourceServerWrapper_TypeMCP(t *testing.T) {
 id: "rs1"
 name: "Test Server"
 handle: "test-api"
-type: "MCP"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "MCP"
+    identifier: "https://api.example.com/rs1"
 `)
 
 	parser := parseAndValidateResourceServerWrapper(nil)
@@ -537,7 +596,8 @@ ouId: "ou1"
 	assert.NoError(t, err)
 	rs, ok := result.(*providers.ResourceServer)
 	assert.True(t, ok)
-	assert.Equal(t, providers.ResourceServerTypeMCP, rs.Type)
+	assert.Len(t, rs.Interfaces, 1)
+	assert.Equal(t, providers.ResourceServerInterfaceTypeMCP, rs.Interfaces[0].Type)
 }
 
 func TestParseAndValidateResourceServerWrapper_InvalidType(t *testing.T) {
@@ -545,8 +605,11 @@ func TestParseAndValidateResourceServerWrapper_InvalidType(t *testing.T) {
 id: "rs1"
 name: "Test Server"
 handle: "test-api"
-type: "BOGUS"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "BOGUS"
+    identifier: "https://api.example.com/rs1"
 `)
 
 	parser := parseAndValidateResourceServerWrapper(nil)
@@ -608,10 +671,9 @@ func TestBuildPermissionString(t *testing.T) {
 
 func TestProcessResourceServer_SetsPermissionsAndDelimiter(t *testing.T) {
 	rs := &providers.ResourceServer{
-		ID:         "rs1",
-		Name:       "Test Server",
-		OUID:       "ou1",
-		Identifier: "api",
+		ID:   "rs1",
+		Name: "Test Server",
+		OUID: "ou1",
 		Resources: []providers.Resource{
 			{
 				Name:   "Users",
@@ -654,14 +716,13 @@ func TestProcessResourceServer_DuplicateHandle(t *testing.T) {
 	assert.Contains(t, err.Error(), "duplicate resource handle")
 }
 
-func TestProcessResourceServer_MCPActionCollidesWithGroupPermission(t *testing.T) {
-	// An MCP resource server where a group (RESOURCE) nested under "ops" shares its handle with a
-	// tool (ACTION) nested under the same "ops" group: both derive "ops:deploy".
+func TestProcessResourceServer_ActionCollidesWithGroupPermission(t *testing.T) {
+	// A group (RESOURCE) nested under "ops" shares its handle with an action nested under the same
+	// "ops" group: both derive "ops:deploy".
 	rs := &providers.ResourceServer{
 		ID:   "rs-mcp",
 		Name: "Booking MCP",
 		OUID: "ou1",
-		Type: providers.ResourceServerTypeMCP,
 		Resources: []providers.Resource{
 			{
 				Name:   "Ops",
@@ -685,15 +746,14 @@ func TestProcessResourceServer_MCPActionCollidesWithGroupPermission(t *testing.T
 	assert.Contains(t, err.Error(), "ops:deploy")
 }
 
-func TestProcessResourceServer_MCPActionCollidesWithNestedGroupPermission(t *testing.T) {
-	// A tool nested under group "a" derives "a:b". A child group "b" nested under "a" derives the
+func TestProcessResourceServer_ActionCollidesWithNestedGroupPermission(t *testing.T) {
+	// An action nested under group "a" derives "a:b". A child group "b" nested under "a" derives the
 	// same "a:b". The cross-entity collision is caught even though the two collide via different
 	// nesting paths rather than at the same level.
 	rs := &providers.ResourceServer{
 		ID:   "rs-mcp",
 		Name: "Booking MCP",
 		OUID: "ou1",
-		Type: providers.ResourceServerTypeMCP,
 		Resources: []providers.Resource{
 			{
 				Name:   "Group A",
@@ -717,12 +777,11 @@ func TestProcessResourceServer_MCPActionCollidesWithNestedGroupPermission(t *tes
 	assert.Contains(t, err.Error(), "a:b")
 }
 
-func TestProcessResourceServer_MCPNoCollisionSucceeds(t *testing.T) {
+func TestProcessResourceServer_NoCollisionSucceeds(t *testing.T) {
 	rs := &providers.ResourceServer{
 		ID:   "rs-mcp",
 		Name: "Booking MCP",
 		OUID: "ou1",
-		Type: providers.ResourceServerTypeMCP,
 		Resources: []providers.Resource{
 			{
 				Name:   "Ops",
@@ -750,14 +809,18 @@ func TestProcessResourceServer_MCPNoCollisionSucceeds(t *testing.T) {
 	assert.Equal(t, "users:create", rs.Resources[1].Actions[0].Permission)
 }
 
-func TestProcessResourceServer_NonMCPSkipsPermissionCollisionCheck(t *testing.T) {
-	// An API resource server with the same structure that collides for MCP must still succeed,
-	// since Rule 6 (cross-entity permission collision) applies only to MCP-type resource servers.
+func TestProcessResourceServer_CollisionCheckIsInterfaceIndependent(t *testing.T) {
+	// Permissions belong to the resource server, not to any interface, so a colliding structure is
+	// rejected regardless of the interfaces the resource server exposes.
 	rs := &providers.ResourceServer{
 		ID:   "rs-api",
 		Name: "Booking API",
 		OUID: "ou1",
-		Type: providers.ResourceServerTypeAPI,
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:         "rsi1",
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: "https://booking.example.com/api",
+		}},
 		Resources: []providers.Resource{
 			{
 				Name:   "Ops",
@@ -776,7 +839,9 @@ func TestProcessResourceServer_NonMCPSkipsPermissionCollisionCheck(t *testing.T)
 
 	err := ProcessResourceServer(rs)
 
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate permission")
+	assert.Contains(t, err.Error(), "ops:deploy")
 }
 
 func TestProcessResource_SetsPermissions(t *testing.T) {
@@ -814,8 +879,11 @@ func TestParseAndValidateResourceServerWrapper_Success(t *testing.T) {
 	yamlData := []byte(`
 id: "rs1"
 name: "Test Server"
-identifier: "api"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "API"
+    identifier: "api"
 resources:
   - name: "Users"
     handle: "users"
@@ -842,8 +910,11 @@ func TestParseAndValidateResourceServerWrapper_MCPPermissionCollisionRejected(t 
 	yamlData := []byte(`
 id: "rs-mcp"
 name: "Booking MCP"
-type: "MCP"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "MCP"
+    identifier: "https://api.example.com/rs1"
 resources:
   - name: "Ops"
     handle: "ops"
@@ -869,8 +940,11 @@ func TestParseAndValidateResourceServerWrapper_MCPCleanSucceeds(t *testing.T) {
 	yamlData := []byte(`
 id: "rs-mcp"
 name: "Booking MCP"
-type: "MCP"
 ouId: "ou1"
+interfaces:
+  - id: "rsi1"
+    type: "MCP"
+    identifier: "https://api.example.com/rs1"
 resources:
   - name: "Ops"
     handle: "ops"
@@ -920,13 +994,22 @@ func TestValidateResourceServerWrapper_EmptyName(t *testing.T) {
 	assert.Contains(t, err.Error(), "name cannot be empty")
 }
 
-func TestValidateResourceServerWrapper_EmptyIdentifier(t *testing.T) {
+// testInterfaces returns a single valid API interface for declarative validation tests.
+func testInterfaces() []providers.ResourceServerInterface {
+	return []providers.ResourceServerInterface{{
+		ID:         "rsi1",
+		Type:       providers.ResourceServerInterfaceTypeAPI,
+		Identifier: "https://api.example.com/test",
+	}}
+}
+
+func TestValidateResourceServerWrapper_MissingInterfaces(t *testing.T) {
 	fileStore := newResourceStoreInterfaceMock(t)
 
 	err := validateResourceServerWrapper(&providers.ResourceServer{ID: "rs1", Name: "Server"}, fileStore, nil, nil)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "identifier cannot be empty")
+	assert.Contains(t, err.Error(), "must declare at least one interface")
 }
 
 func TestValidateResourceServerWrapper_DuplicateInFileStore(t *testing.T) {
@@ -934,7 +1017,7 @@ func TestValidateResourceServerWrapper_DuplicateInFileStore(t *testing.T) {
 	fileStore.On("GetResourceServer", mock.Anything, "rs1").Return(providers.ResourceServer{ID: "rs1"}, nil)
 
 	err := validateResourceServerWrapper(
-		&providers.ResourceServer{ID: "rs1", Name: "Server", Identifier: "test-server", OUID: "ou1"},
+		&providers.ResourceServer{ID: "rs1", Name: "Server", OUID: "ou1", Interfaces: testInterfaces()},
 		fileStore, nil, nil)
 
 	assert.Error(t, err)
@@ -946,7 +1029,7 @@ func TestValidateResourceServerWrapper_FileStoreError(t *testing.T) {
 	fileStore.On("GetResourceServer", mock.Anything, "rs1").Return(providers.ResourceServer{}, errors.New("file error"))
 
 	err := validateResourceServerWrapper(
-		&providers.ResourceServer{ID: "rs1", Name: "Server", Identifier: "test-server", OUID: "ou1"},
+		&providers.ResourceServer{ID: "rs1", Name: "Server", OUID: "ou1", Interfaces: testInterfaces()},
 		fileStore, nil, nil)
 
 	assert.Error(t, err)
@@ -961,7 +1044,7 @@ func TestValidateResourceServerWrapper_DuplicateInDBStore(t *testing.T) {
 	dbStore.On("GetResourceServer", mock.Anything, "rs1").Return(providers.ResourceServer{ID: "rs1"}, nil)
 
 	err := validateResourceServerWrapper(
-		&providers.ResourceServer{ID: "rs1", Name: "Server", Identifier: "test-server", OUID: "ou1"},
+		&providers.ResourceServer{ID: "rs1", Name: "Server", OUID: "ou1", Interfaces: testInterfaces()},
 		fileStore, dbStore, nil)
 
 	assert.Error(t, err)
@@ -976,7 +1059,7 @@ func TestValidateResourceServerWrapper_DBStoreError(t *testing.T) {
 	dbStore.On("GetResourceServer", mock.Anything, "rs1").Return(providers.ResourceServer{}, errors.New("db error"))
 
 	err := validateResourceServerWrapper(
-		&providers.ResourceServer{ID: "rs1", Name: "Server", Identifier: "test-server", OUID: "ou1"},
+		&providers.ResourceServer{ID: "rs1", Name: "Server", OUID: "ou1", Interfaces: testInterfaces()},
 		fileStore, dbStore, nil)
 
 	assert.Error(t, err)
@@ -987,12 +1070,87 @@ func TestValidateResourceServerWrapper_Success(t *testing.T) {
 	fileStore := newResourceStoreInterfaceMock(t)
 	fileStore.On("GetResourceServer", mock.Anything, "rs1").
 		Return(providers.ResourceServer{}, errResourceServerNotFound)
+	// No other resource server claims this interface ID or identifier.
+	fileStore.On("GetResourceServerInterface", mock.Anything, "rsi1").
+		Return(providers.ResourceServerInterface{}, errResourceServerInterfaceNotFound)
+	fileStore.On("GetResourceServerInterfaceByIdentifier", mock.Anything, "https://api.example.com/test").
+		Return(providers.ResourceServerInterface{}, errResourceServerInterfaceNotFound)
 
 	err := validateResourceServerWrapper(
-		&providers.ResourceServer{ID: "rs1", Name: "Server", Identifier: "test-server", OUID: "ou1"},
+		&providers.ResourceServer{ID: "rs1", Name: "Server", OUID: "ou1", Interfaces: testInterfaces()},
 		fileStore, nil, nil)
 
 	assert.NoError(t, err)
+}
+
+// A second declarative resource server must not claim an identifier another one already exposes:
+// identifier resolution returns the first match, so the audience would depend on store ordering.
+func TestValidateResourceServerWrapper_DuplicateInterfaceIdentifierAcrossServers(t *testing.T) {
+	fileStore := newResourceStoreInterfaceMock(t)
+	fileStore.On("GetResourceServer", mock.Anything, "rs2").
+		Return(providers.ResourceServer{}, errResourceServerNotFound)
+	fileStore.On("GetResourceServerInterface", mock.Anything, "rsi1").
+		Return(providers.ResourceServerInterface{}, errResourceServerInterfaceNotFound)
+	fileStore.On("GetResourceServerInterfaceByIdentifier", mock.Anything, "https://api.example.com/test").
+		Return(providers.ResourceServerInterface{
+			ID:               "rsi-other",
+			ResourceServerID: "rs1",
+			Identifier:       "https://api.example.com/test",
+		}, nil)
+
+	err := validateResourceServerWrapper(
+		&providers.ResourceServer{ID: "rs2", Name: "Second Server", OUID: "ou1", Interfaces: testInterfaces()},
+		fileStore, nil, nil)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate interface identifier")
+	assert.Contains(t, err.Error(), "rs1")
+}
+
+// An interface ID already used by another resource server is rejected too, since the default
+// interface configuration references interfaces by ID.
+func TestValidateResourceServerWrapper_DuplicateInterfaceIDAcrossServers(t *testing.T) {
+	fileStore := newResourceStoreInterfaceMock(t)
+	fileStore.On("GetResourceServer", mock.Anything, "rs2").
+		Return(providers.ResourceServer{}, errResourceServerNotFound)
+	fileStore.On("GetResourceServerInterface", mock.Anything, "rsi1").
+		Return(providers.ResourceServerInterface{ID: "rsi1", ResourceServerID: "rs1"}, nil)
+
+	err := validateResourceServerWrapper(
+		&providers.ResourceServer{ID: "rs2", Name: "Second Server", OUID: "ou1", Interfaces: testInterfaces()},
+		fileStore, nil, nil)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate interface ID")
+}
+
+// In composite mode a declarative interface must not collide with a database-backed one either.
+func TestValidateResourceServerWrapper_DuplicateInterfaceIdentifierInDBStore(t *testing.T) {
+	fileStore := newResourceStoreInterfaceMock(t)
+	dbStore := newResourceStoreInterfaceMock(t)
+	fileStore.On("GetResourceServer", mock.Anything, "rs2").
+		Return(providers.ResourceServer{}, errResourceServerNotFound)
+	dbStore.On("GetResourceServer", mock.Anything, "rs2").
+		Return(providers.ResourceServer{}, errResourceServerNotFound)
+	fileStore.On("GetResourceServerInterface", mock.Anything, "rsi1").
+		Return(providers.ResourceServerInterface{}, errResourceServerInterfaceNotFound).Maybe()
+	fileStore.On("GetResourceServerInterfaceByIdentifier", mock.Anything, "https://api.example.com/test").
+		Return(providers.ResourceServerInterface{}, errResourceServerInterfaceNotFound).Maybe()
+	dbStore.On("GetResourceServerInterface", mock.Anything, "rsi1").
+		Return(providers.ResourceServerInterface{}, errResourceServerInterfaceNotFound).Maybe()
+	dbStore.On("GetResourceServerInterfaceByIdentifier", mock.Anything, "https://api.example.com/test").
+		Return(providers.ResourceServerInterface{
+			ID:               "rsi-db",
+			ResourceServerID: "rs-db",
+			Identifier:       "https://api.example.com/test",
+		}, nil).Maybe()
+
+	err := validateResourceServerWrapper(
+		&providers.ResourceServer{ID: "rs2", Name: "Second Server", OUID: "ou1", Interfaces: testInterfaces()},
+		fileStore, dbStore, nil)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate interface identifier")
 }
 
 func TestLoadDeclarativeResources_CompositeFileStoreTypeError(t *testing.T) {

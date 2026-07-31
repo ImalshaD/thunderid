@@ -24,14 +24,27 @@ import "github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
 
 // ResourceServerResponse represents a resource server.
 type ResourceServerResponse struct {
-	ID          string                       `json:"id"`
-	Name        string                       `json:"name"`
-	Description string                       `json:"description,omitempty"`
-	Identifier  string                       `json:"identifier"`
-	Type        providers.ResourceServerType `json:"type"`
-	OUID        string                       `json:"ouId"`
-	Delimiter   string                       `json:"delimiter"`
-	IsReadOnly  bool                         `json:"isReadOnly"`
+	ID          string                            `json:"id"`
+	Name        string                            `json:"name"`
+	Description string                            `json:"description,omitempty"`
+	OUID        string                            `json:"ouId"`
+	Delimiter   string                            `json:"delimiter"`
+	Interfaces  []ResourceServerInterfaceResponse `json:"interfaces"`
+	IsReadOnly  bool                              `json:"isReadOnly"`
+}
+
+// ResourceServerInterfaceResponse represents an interface of a resource server.
+type ResourceServerInterfaceResponse struct {
+	ID         string                                `json:"id"`
+	Type       providers.ResourceServerInterfaceType `json:"type"`
+	Identifier string                                `json:"identifier"`
+	IsReadOnly bool                                  `json:"isReadOnly"`
+}
+
+// ResourceServerInterfaceListResponse represents the response for listing interfaces.
+type ResourceServerInterfaceListResponse struct {
+	TotalResults int                               `json:"totalResults"`
+	Interfaces   []ResourceServerInterfaceResponse `json:"interfaces"`
 }
 
 // ResourceResponse represents a resource.
@@ -87,22 +100,27 @@ type ActionListResponse struct {
 	Links        []LinkResponse   `json:"links"`
 }
 
-// CreateResourceServerRequest represents the request to create a resource server.
+// CreateResourceServerRequest represents the request to create a resource server. The initial
+// interface is created in the same operation, and may be marked as the deployment default.
 type CreateResourceServerRequest struct {
-	Name        string                       `json:"name"                  native:"required"`
-	Description string                       `json:"description,omitempty"`
-	Identifier  string                       `json:"identifier"            native:"required"`
-	Type        providers.ResourceServerType `json:"type,omitempty"`
-	OUID        string                       `json:"ouId"                  native:"required"`
-	Delimiter   string                       `json:"delimiter,omitempty"`
+	Name        string                         `json:"name"                  native:"required"`
+	Description string                         `json:"description,omitempty"`
+	OUID        string                         `json:"ouId"                  native:"required"`
+	Delimiter   string                         `json:"delimiter,omitempty"`
+	Interface   ResourceServerInterfaceRequest `json:"interface"             native:"required"`
 }
 
 // UpdateResourceServerRequest represents the request to update a resource server.
 type UpdateResourceServerRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	Identifier  string `json:"identifier,omitempty"`
 	OUID        string `json:"ouId"                  native:"required"`
+}
+
+// ResourceServerInterfaceRequest represents the request to create or update an interface.
+type ResourceServerInterfaceRequest struct {
+	Type       providers.ResourceServerInterfaceType `json:"type"       native:"required"`
+	Identifier string                                `json:"identifier" native:"required"`
 }
 
 // CreateResourceRequest represents the request to create a resource.

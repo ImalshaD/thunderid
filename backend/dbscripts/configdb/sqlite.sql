@@ -181,8 +181,6 @@ CREATE TABLE "RESOURCE_SERVER" (
     OU_ID VARCHAR(36) NOT NULL,
     NAME VARCHAR(100) NOT NULL,
     DESCRIPTION TEXT,
-    IDENTIFIER VARCHAR(2048) NOT NULL,
-    TYPE VARCHAR(20) CHECK (TYPE IS NULL OR TYPE IN ('API', 'MCP', 'CUSTOM')),
     PROPERTIES TEXT,
     CREATED_AT TEXT DEFAULT (datetime('now')),
     UPDATED_AT TEXT DEFAULT (datetime('now')),
@@ -192,9 +190,28 @@ CREATE TABLE "RESOURCE_SERVER" (
 -- Composite index for name-based resource server lookups
 CREATE INDEX idx_resource_server_name_deployment ON "RESOURCE_SERVER" (DEPLOYMENT_ID, NAME);
 
--- Unique constraint: Resource server identifier must be unique per deployment
-CREATE UNIQUE INDEX uq_resource_server_identifier
-    ON "RESOURCE_SERVER"(IDENTIFIER, DEPLOYMENT_ID);
+-- Table to store the interfaces through which a resource server is accessed.
+CREATE TABLE "RESOURCE_SERVER_INTERFACE" (
+    DEPLOYMENT_ID VARCHAR(255) NOT NULL,
+    ID VARCHAR(36) PRIMARY KEY,
+    RESOURCE_SERVER_ID VARCHAR(36) NOT NULL,
+    TYPE VARCHAR(10) NOT NULL CHECK (TYPE IN ('API', 'MCP')),
+    IDENTIFIER VARCHAR(2048) NOT NULL,
+    CREATED_AT TEXT DEFAULT (datetime('now')),
+    UPDATED_AT TEXT DEFAULT (datetime('now')),
+
+    FOREIGN KEY (RESOURCE_SERVER_ID)
+        REFERENCES "RESOURCE_SERVER" (ID)
+        ON DELETE CASCADE
+);
+
+-- Unique constraint: Resource server interface identifier must be unique per deployment
+CREATE UNIQUE INDEX uq_resource_server_interface_identifier
+    ON "RESOURCE_SERVER_INTERFACE" (DEPLOYMENT_ID, IDENTIFIER);
+
+-- Composite index for listing the interfaces of a resource server
+CREATE INDEX idx_resource_server_interface_resource_server
+    ON "RESOURCE_SERVER_INTERFACE" (DEPLOYMENT_ID, RESOURCE_SERVER_ID);
 
 -- Table to store resources within resource servers.
 CREATE TABLE "RESOURCE" (

@@ -84,9 +84,12 @@ resource_type: resource_server
 id: wayfinder-agent-rs
 name: Wayfinder Agent
 description: Controls access to the Wayfinder Concierge agent
-identifier: http://localhost:8790/chat
 ouHandle: default
 delimiter: ":"
+interfaces:
+  - id: wayfinder-agent-rsi
+    type: API
+    identifier: http://localhost:8790/chat
 resources:
   - name: Agent
     handle: agent
@@ -1991,9 +1994,9 @@ credentials:
 resource_type: server_config
 # Binds the web app's no-resource sign-in token to the booking resource server.
 # The chat widget requests agent:access separately with resource=http://localhost:8790/chat.
-name: defaultResourceServer
+name: defaultResourceServerInterface
 value:
-  resourceServerId: wayfinder-booking-rs
+  resourceServerId: wayfinder-booking-rsi
 
 ---
 resource_type: server_config

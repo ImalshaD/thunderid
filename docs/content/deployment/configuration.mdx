@@ -875,30 +875,30 @@ The `null` origin is shared by sandboxed iframes, `file://` and `data:` document
 
 ## Default Resource Server
 
-Sets the resource server for permission-bearing token requests that omit the `resource` parameter. It is stored in the server-config `defaultResourceServer` section, not in `deployment.yaml`. When no default is configured, a request that contains permission scopes but omits `resource` fails with `invalid_target`. OIDC-only and scopeless requests are not bound to a resource server, so they use the application's default audience (`token.accessToken.defaultAudience`), or the `client_id` when it is unset.
+Sets the resource server interface for permission-bearing token requests that omit the `resource` parameter. Its identifier becomes the access-token audience. The interface ID is stored in the server-config `defaultResourceServerInterface` section, not in `deployment.yaml`. When no default is configured, a request that contains permission scopes but omits `resource` fails with `invalid_target`. OIDC-only and scopeless requests are not bound to a resource server, so they use the application's default audience (`token.accessToken.defaultAudience`), or the `client_id` when it is unset.
 
 | Field | Description |
 |-------|-------------|
-| `resourceServerId` | The ID of a registered resource server. It must reference an existing resource server, otherwise the update is rejected with `SCF-1003` ("Invalid server configuration value"). |
+| `resourceServerInterfaceId` | The ID of a registered resource server interface. It must reference an existing interface, otherwise the update is rejected with `SCF-1003` ("Invalid server configuration value"). Its owning resource server becomes the effective default resource server. |
 
 Set it in either of these ways:
 
-- **Declarative** - create `config/resources/server_configs/defaultResourceServer.yaml`, then restart:
+- **Declarative** - create `config/resources/server_configs/defaultResourceServerInterface.yaml`, then restart:
   ```yaml
-  name: defaultResourceServer
+  name: defaultResourceServerInterface
   value:
-    resourceServerId: "<resource-server-id>"
+    resourceServerInterfaceId: "<resource-server-interface-id>"
   ```
-- **Runtime** - send the new value to `PUT /server-config/defaultResourceServer`; it is applied immediately:
+- **Runtime** - send the new value to `PUT /server-config/defaultResourceServerInterface`; it is applied immediately:
   ```http
-  PUT /server-config/defaultResourceServer
+  PUT /server-config/defaultResourceServerInterface
   Content-Type: application/json
 
-  { "resourceServerId": "<resource-server-id>" }
+  { "resourceServerInterfaceId": "<resource-server-interface-id>" }
   ```
 
 :::note
-A declarative default takes precedence and locks the setting: while `defaultResourceServer.yaml` sets a value, runtime `PUT /server-config/defaultResourceServer` requests are rejected. Remove the declarative value to manage the default at runtime.
+A declarative default takes precedence and locks the setting: while `defaultResourceServerInterface.yaml` sets a value, runtime `PUT /server-config/defaultResourceServerInterface` requests are rejected. Remove the declarative value to manage the default at runtime.
 :::
 
 ## Flow Defaults

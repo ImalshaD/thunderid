@@ -180,13 +180,67 @@ func (c *compositeResourceStore) CheckResourceServerNameExists(ctx context.Conte
 	)
 }
 
-// CheckResourceServerIdentifierExists checks whether a resource server identifier exists in either store.
-func (c *compositeResourceStore) CheckResourceServerIdentifierExists(
+// CheckResourceServerInterfaceIdentifierExists checks whether an interface identifier exists in either store.
+func (c *compositeResourceStore) CheckResourceServerInterfaceIdentifierExists(
 	ctx context.Context, identifier string) (bool, error) {
 	return declarativeresource.CompositeBooleanCheckHelper(
-		func() (bool, error) { return c.fileStore.CheckResourceServerIdentifierExists(ctx, identifier) },
-		func() (bool, error) { return c.dbStore.CheckResourceServerIdentifierExists(ctx, identifier) },
+		func() (bool, error) { return c.fileStore.CheckResourceServerInterfaceIdentifierExists(ctx, identifier) },
+		func() (bool, error) { return c.dbStore.CheckResourceServerInterfaceIdentifierExists(ctx, identifier) },
 	)
+}
+
+// CreateResourceServerInterface creates a resource server interface in the database store.
+func (c *compositeResourceStore) CreateResourceServerInterface(
+	ctx context.Context, rsi providers.ResourceServerInterface) error {
+	return c.dbStore.CreateResourceServerInterface(ctx, rsi)
+}
+
+// GetResourceServerInterface retrieves a resource server interface from either store.
+func (c *compositeResourceStore) GetResourceServerInterface(
+	ctx context.Context, interfaceID string) (providers.ResourceServerInterface, error) {
+	return declarativeresource.CompositeGetHelper(
+		func() (providers.ResourceServerInterface, error) {
+			return c.dbStore.GetResourceServerInterface(ctx, interfaceID)
+		},
+		func() (providers.ResourceServerInterface, error) {
+			return c.fileStore.GetResourceServerInterface(ctx, interfaceID)
+		},
+		errResourceServerInterfaceNotFound,
+	)
+}
+
+// GetResourceServerInterfaceByIdentifier retrieves an interface by identifier from either store.
+func (c *compositeResourceStore) GetResourceServerInterfaceByIdentifier(
+	ctx context.Context, identifier string) (providers.ResourceServerInterface, error) {
+	return declarativeresource.CompositeGetHelper(
+		func() (providers.ResourceServerInterface, error) {
+			return c.dbStore.GetResourceServerInterfaceByIdentifier(ctx, identifier)
+		},
+		func() (providers.ResourceServerInterface, error) {
+			return c.fileStore.GetResourceServerInterfaceByIdentifier(ctx, identifier)
+		},
+		errResourceServerInterfaceNotFound,
+	)
+}
+
+// ListResourceServerInterfaces returns the interfaces of a resource server from the owning store.
+func (c *compositeResourceStore) ListResourceServerInterfaces(
+	ctx context.Context, resourceServerID string) ([]providers.ResourceServerInterface, error) {
+	if c.fileStore.IsResourceServerDeclarative(resourceServerID) {
+		return c.fileStore.ListResourceServerInterfaces(ctx, resourceServerID)
+	}
+	return c.dbStore.ListResourceServerInterfaces(ctx, resourceServerID)
+}
+
+// UpdateResourceServerInterface updates a resource server interface in the database store.
+func (c *compositeResourceStore) UpdateResourceServerInterface(
+	ctx context.Context, rsi providers.ResourceServerInterface) error {
+	return c.dbStore.UpdateResourceServerInterface(ctx, rsi)
+}
+
+// DeleteResourceServerInterface deletes a resource server interface from the database store.
+func (c *compositeResourceStore) DeleteResourceServerInterface(ctx context.Context, interfaceID string) error {
+	return c.dbStore.DeleteResourceServerInterface(ctx, interfaceID)
 }
 
 // GetResourceServerByIdentifier retrieves a resource server by identifier from the composite store.

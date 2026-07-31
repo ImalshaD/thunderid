@@ -83,14 +83,13 @@ func (suite *ResourceStoreTestSuite) TestCreateResourceServer() {
 				OUID:        "ou1",
 				Name:        "Test Server",
 				Description: "Test Description",
-				Identifier:  "test-identifier",
 				Delimiter:   ":",
 			},
 			setupMocks: func() {
 				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
 				suite.mockDBClient.On("ExecuteContext", context.Background(),
 					queryCreateResourceServer, "rs1", "ou1", "Test Server",
-					"Test Description", "test-identifier", nil,
+					"Test Description",
 					[]byte(`{"delimiter":":"}`), "test-deployment").
 					Return(int64(1), nil)
 			},
@@ -103,15 +102,13 @@ func (suite *ResourceStoreTestSuite) TestCreateResourceServer() {
 				OUID:        "ou1",
 				Name:        "Test Server",
 				Description: "Test Description",
-				Identifier:  "test-identifier",
-				Type:        providers.ResourceServerTypeMCP,
 				Delimiter:   ":",
 			},
 			setupMocks: func() {
 				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
 				suite.mockDBClient.On("ExecuteContext", context.Background(),
 					queryCreateResourceServer, "rs1", "ou1", "Test Server",
-					"Test Description", "test-identifier", "MCP",
+					"Test Description",
 					[]byte(`{"delimiter":":"}`), "test-deployment").
 					Return(int64(1), nil)
 			},
@@ -124,14 +121,13 @@ func (suite *ResourceStoreTestSuite) TestCreateResourceServer() {
 				OUID:        "ou1",
 				Name:        "Test Server",
 				Description: "Test Description",
-				Identifier:  "test-identifier",
 				Delimiter:   ":",
 			},
 			setupMocks: func() {
 				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
 				suite.mockDBClient.On("ExecuteContext", context.Background(),
 					queryCreateResourceServer, "rs1", "ou1", "Test Server",
-					"Test Description", "test-identifier", nil,
+					"Test Description",
 					[]byte(`{"delimiter":":"}`), "test-deployment").
 					Return(int64(0), errors.New("insert failed"))
 			},
@@ -148,7 +144,6 @@ func (suite *ResourceStoreTestSuite) TestCreateResourceServer() {
 				OUID:        "ou1",
 				Name:        "Test Server",
 				Description: "Test Description",
-				Identifier:  "test-identifier",
 			},
 			setupMocks: func() {
 				suite.mockDBProvider.On("GetConfigDBClient").Return(nil, errors.New("database connection error"))
@@ -213,9 +208,17 @@ func (suite *ResourceStoreTestSuite) TestGetResourceServer() {
 							"ou_id":       "ou1",
 							"name":        "Test Server",
 							"description": "Test Description",
-							"identifier":  "test-identifier",
-							"type":        "MCP",
 							"properties":  []byte(`{"delimiter":"/"}`),
+						},
+					}, nil)
+				suite.mockDBClient.On("QueryContext", context.Background(),
+					queryGetResourceServerInterfaceList, "rs1", "test-deployment").
+					Return([]map[string]interface{}{
+						{
+							"id":                 "rsi1",
+							"resource_server_id": "rs1",
+							"type":               "MCP",
+							"identifier":         "https://localhost:8090/mcp",
 						},
 					}, nil)
 			},
@@ -225,9 +228,13 @@ func (suite *ResourceStoreTestSuite) TestGetResourceServer() {
 				OUID:        "ou1",
 				Name:        "Test Server",
 				Description: "Test Description",
-				Identifier:  "test-identifier",
-				Type:        providers.ResourceServerTypeMCP,
 				Delimiter:   "/",
+				Interfaces: []providers.ResourceServerInterface{{
+					ID:               "rsi1",
+					ResourceServerID: "rs1",
+					Type:             providers.ResourceServerInterfaceTypeMCP,
+					Identifier:       "https://localhost:8090/mcp",
+				}},
 			},
 			shouldErr: false,
 		},
@@ -292,9 +299,8 @@ func (suite *ResourceStoreTestSuite) TestGetResourceServer() {
 				suite.Equal(tc.expectedRS.OUID, rs.OUID)
 				suite.Equal(tc.expectedRS.Name, rs.Name)
 				suite.Equal(tc.expectedRS.Description, rs.Description)
-				suite.Equal(tc.expectedRS.Identifier, rs.Identifier)
-				suite.Equal(tc.expectedRS.Type, rs.Type)
 				suite.Equal(tc.expectedRS.Delimiter, rs.Delimiter)
+				suite.Equal(tc.expectedRS.Interfaces, rs.Interfaces)
 			}
 		})
 	}
@@ -325,7 +331,6 @@ func (suite *ResourceStoreTestSuite) TestGetResourceServerList() {
 							"ou_id":       "ou1",
 							"name":        "Server 1",
 							"description": "Description 1",
-							"identifier":  "identifier-1",
 						},
 						{
 							"internal_id": 2,
@@ -333,9 +338,14 @@ func (suite *ResourceStoreTestSuite) TestGetResourceServerList() {
 							"ou_id":       "ou1",
 							"name":        "Server 2",
 							"description": "Description 2",
-							"identifier":  "identifier-2",
 						},
 					}, nil)
+				suite.mockDBClient.On("QueryContext", context.Background(),
+					queryGetResourceServerInterfaceList, "rs1", "test-deployment").
+					Return([]map[string]interface{}{}, nil)
+				suite.mockDBClient.On("QueryContext", context.Background(),
+					queryGetResourceServerInterfaceList, "rs2", "test-deployment").
+					Return([]map[string]interface{}{}, nil)
 			},
 			expectedServers: []providers.ResourceServer{
 				{ID: "rs1", Name: "Server 1"},
@@ -486,15 +496,13 @@ func (suite *ResourceStoreTestSuite) TestUpdateResourceServer() {
 				OUID:        "ou1",
 				Name:        "Updated Server",
 				Description: "Updated Description",
-				Identifier:  "updated-identifier",
-				Type:        providers.ResourceServerTypeAPI,
 				Delimiter:   "-",
 			},
 			setupMocks: func() {
 				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
 				suite.mockDBClient.On("ExecuteContext", context.Background(),
 					queryUpdateResourceServer, "ou1", "Updated Server",
-					"Updated Description", "updated-identifier", "API",
+					"Updated Description",
 					[]byte(`{"delimiter":"-"}`), "rs1", "test-deployment").
 					Return(int64(1), nil)
 			},
@@ -507,15 +515,13 @@ func (suite *ResourceStoreTestSuite) TestUpdateResourceServer() {
 				OUID:        "ou1",
 				Name:        "Updated Server",
 				Description: "Updated Description",
-				Identifier:  "updated-identifier",
-				Type:        providers.ResourceServerTypeAPI,
 				Delimiter:   "-",
 			},
 			setupMocks: func() {
 				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
 				suite.mockDBClient.On("ExecuteContext", context.Background(),
 					queryUpdateResourceServer, "ou1", "Updated Server",
-					"Updated Description", "updated-identifier", "API",
+					"Updated Description",
 					[]byte(`{"delimiter":"-"}`), "rs1", "test-deployment").
 					Return(int64(0), errors.New("update failed"))
 			},
@@ -730,7 +736,7 @@ func (suite *ResourceStoreTestSuite) runBoolCheckTest(
 }
 
 // nolint:dupl
-func (suite *ResourceStoreTestSuite) TestCheckResourceServerIdentifierExists() {
+func (suite *ResourceStoreTestSuite) TestCheckResourceServerInterfaceIdentifierExists() {
 	testCases := []struct {
 		name           string
 		identifier     string
@@ -744,7 +750,7 @@ func (suite *ResourceStoreTestSuite) TestCheckResourceServerIdentifierExists() {
 			setupMocks: func() {
 				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
 				suite.mockDBClient.On("QueryContext", context.Background(),
-					queryCheckResourceServerIdentifierExists,
+					queryCheckResourceServerInterfaceIdentifierExists,
 					"test-identifier", "test-deployment").Return([]map[string]interface{}{
 					{"count": int64(1)},
 				}, nil)
@@ -758,7 +764,7 @@ func (suite *ResourceStoreTestSuite) TestCheckResourceServerIdentifierExists() {
 			setupMocks: func() {
 				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
 				suite.mockDBClient.On("QueryContext", context.Background(),
-					queryCheckResourceServerIdentifierExists,
+					queryCheckResourceServerInterfaceIdentifierExists,
 					"nonexistent-identifier", "test-deployment").Return([]map[string]interface{}{
 					{"count": int64(0)},
 				}, nil)
@@ -772,7 +778,7 @@ func (suite *ResourceStoreTestSuite) TestCheckResourceServerIdentifierExists() {
 			setupMocks: func() {
 				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
 				suite.mockDBClient.On("QueryContext", context.Background(),
-					queryCheckResourceServerIdentifierExists,
+					queryCheckResourceServerInterfaceIdentifierExists,
 					"test-identifier", "test-deployment").Return(nil, errors.New("query error"))
 			},
 			expectedExists: false,
@@ -783,7 +789,7 @@ func (suite *ResourceStoreTestSuite) TestCheckResourceServerIdentifierExists() {
 	for _, tc := range testCases {
 		suite.runBoolCheckTest(tc.name, tc.setupMocks,
 			func() (bool, error) {
-				return suite.store.CheckResourceServerIdentifierExists(context.Background(),
+				return suite.store.CheckResourceServerInterfaceIdentifierExists(context.Background(),
 					tc.identifier)
 			},
 			tc.expectedExists, tc.shouldErr)
@@ -3094,7 +3100,6 @@ func (suite *ResourceStoreTestSuite) TestBuildResourceServerFromResultRow() {
 				"ou_id":       "ou1",
 				"name":        "Test Server",
 				"description": "Test Description",
-				"identifier":  "test-identifier",
 				"properties":  []byte(`{"delimiter":"|"}`),
 			},
 			expectedResourceServer: providers.ResourceServer{
@@ -3102,7 +3107,6 @@ func (suite *ResourceStoreTestSuite) TestBuildResourceServerFromResultRow() {
 				OUID:        "ou1",
 				Name:        "Test Server",
 				Description: "Test Description",
-				Identifier:  "test-identifier",
 				Delimiter:   "|",
 			},
 			shouldErr: false,
@@ -3120,7 +3124,6 @@ func (suite *ResourceStoreTestSuite) TestBuildResourceServerFromResultRow() {
 				OUID:        "ou1",
 				Name:        "Test Server",
 				Description: "",
-				Identifier:  "",
 			},
 			shouldErr: false,
 		},
@@ -3219,7 +3222,6 @@ func (suite *ResourceStoreTestSuite) TestBuildResourceServerFromResultRow() {
 				suite.Equal(tc.expectedResourceServer.OUID, rs.OUID)
 				suite.Equal(tc.expectedResourceServer.Name, rs.Name)
 				suite.Equal(tc.expectedResourceServer.Description, rs.Description)
-				suite.Equal(tc.expectedResourceServer.Identifier, rs.Identifier)
 				suite.Equal(tc.expectedResourceServer.Delimiter, rs.Delimiter)
 			}
 		})
@@ -3560,39 +3562,6 @@ func (suite *ResourceStoreTestSuite) TestBuildActionFromResultRow() {
 	}
 }
 
-// resolveNullableString Tests
-
-func (suite *ResourceStoreTestSuite) TestResolveNullableString() {
-	testCases := []struct {
-		name     string
-		value    string
-		expected interface{}
-	}{
-		{
-			name:     "Success_NonEmptyValue",
-			value:    "https://api.example.com",
-			expected: "https://api.example.com",
-		},
-		{
-			name:     "Success_AnotherNonEmptyValue",
-			value:    "urn:example:resource:server",
-			expected: "urn:example:resource:server",
-		},
-		{
-			name:     "Success_EmptyValue_ReturnsNil",
-			value:    "",
-			expected: nil,
-		},
-	}
-
-	for _, tc := range testCases {
-		suite.Run(tc.name, func() {
-			result := resolveNullableString(tc.value)
-			suite.Equal(tc.expected, result)
-		})
-	}
-}
-
 // TestValidatePermissions tests the ValidatePermissions function with various scenarios.
 func (suite *ResourceStoreTestSuite) TestValidatePermissions() {
 	testCases := []struct {
@@ -3886,4 +3855,326 @@ func (suite *ResourceStoreTestSuite) TestBuildPropertiesJSONFunction() {
 			suite.NotNil(result)
 		})
 	}
+}
+
+// Resource Server Interface Tests
+
+func (suite *ResourceStoreTestSuite) TestCreateResourceServerInterface() {
+	testCases := []struct {
+		name       string
+		rsi        providers.ResourceServerInterface
+		setupMocks func()
+		shouldErr  bool
+		checkError func(error)
+	}{
+		{
+			name: "Success",
+			rsi: providers.ResourceServerInterface{
+				ID:               "rsi1",
+				ResourceServerID: "rs1",
+				Type:             providers.ResourceServerInterfaceTypeAPI,
+				Identifier:       "https://api.example.com/orders",
+			},
+			setupMocks: func() {
+				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+				suite.mockDBClient.On("ExecuteContext", context.Background(),
+					queryCreateResourceServerInterface, "rsi1", "rs1", "API",
+					"https://api.example.com/orders", "test-deployment").
+					Return(int64(1), nil)
+			},
+		},
+		{
+			name: "ExecuteError",
+			rsi: providers.ResourceServerInterface{
+				ID:               "rsi1",
+				ResourceServerID: "rs1",
+				Type:             providers.ResourceServerInterfaceTypeMCP,
+				Identifier:       "https://localhost:8090/mcp",
+			},
+			setupMocks: func() {
+				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+				suite.mockDBClient.On("ExecuteContext", context.Background(),
+					queryCreateResourceServerInterface, "rsi1", "rs1", "MCP",
+					"https://localhost:8090/mcp", "test-deployment").
+					Return(int64(0), errors.New("insert failed"))
+			},
+			shouldErr: true,
+			checkError: func(err error) {
+				suite.Contains(err.Error(), "failed to create resource server interface")
+			},
+		},
+		{
+			name: "DBClientError",
+			rsi: providers.ResourceServerInterface{
+				ID:               "rsi1",
+				ResourceServerID: "rs1",
+				Type:             providers.ResourceServerInterfaceTypeAPI,
+				Identifier:       "https://api.example.com/orders",
+			},
+			setupMocks: func() {
+				suite.mockDBProvider.On("GetConfigDBClient").Return(nil, errors.New("database connection error"))
+			},
+			shouldErr: true,
+			checkError: func(err error) {
+				suite.Contains(err.Error(), "failed to get config DB client")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			suite.SetupTest()
+			tc.setupMocks()
+
+			err := suite.store.CreateResourceServerInterface(context.Background(), tc.rsi)
+
+			if tc.shouldErr {
+				suite.Error(err)
+				if tc.checkError != nil {
+					tc.checkError(err)
+				}
+			} else {
+				suite.NoError(err)
+			}
+		})
+	}
+}
+
+func (suite *ResourceStoreTestSuite) TestGetResourceServerInterface() {
+	testCases := []struct {
+		name          string
+		interfaceID   string
+		setupMocks    func()
+		expected      providers.ResourceServerInterface
+		expectedError error
+		shouldErr     bool
+	}{
+		{
+			name:        "Success",
+			interfaceID: "rsi1",
+			setupMocks: func() {
+				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+				suite.mockDBClient.On("QueryContext", context.Background(),
+					queryGetResourceServerInterfaceByID, "rsi1", "test-deployment").
+					Return([]map[string]interface{}{
+						{
+							"id":                 "rsi1",
+							"resource_server_id": "rs1",
+							"type":               "MCP",
+							"identifier":         "https://localhost:8090/mcp",
+						},
+					}, nil)
+			},
+			expected: providers.ResourceServerInterface{
+				ID:               "rsi1",
+				ResourceServerID: "rs1",
+				Type:             providers.ResourceServerInterfaceTypeMCP,
+				Identifier:       "https://localhost:8090/mcp",
+			},
+		},
+		{
+			name:        "NotFound",
+			interfaceID: "nonexistent",
+			setupMocks: func() {
+				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+				suite.mockDBClient.On("QueryContext", context.Background(),
+					queryGetResourceServerInterfaceByID, "nonexistent", "test-deployment").
+					Return([]map[string]interface{}{}, nil)
+			},
+			expectedError: errResourceServerInterfaceNotFound,
+			shouldErr:     true,
+		},
+		{
+			name:        "QueryError",
+			interfaceID: "rsi1",
+			setupMocks: func() {
+				suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+				suite.mockDBClient.On("QueryContext", context.Background(),
+					queryGetResourceServerInterfaceByID, "rsi1", "test-deployment").
+					Return(nil, errors.New("query error"))
+			},
+			shouldErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			suite.SetupTest()
+			tc.setupMocks()
+
+			rsi, err := suite.store.GetResourceServerInterface(context.Background(), tc.interfaceID)
+
+			if tc.shouldErr {
+				suite.Error(err)
+				if tc.expectedError != nil {
+					suite.Equal(tc.expectedError, err)
+				}
+				suite.Empty(rsi.ID)
+			} else {
+				suite.NoError(err)
+				suite.Equal(tc.expected, rsi)
+			}
+		})
+	}
+}
+
+func (suite *ResourceStoreTestSuite) TestGetResourceServerInterfaceByIdentifier() {
+	suite.Run("Success", func() {
+		suite.SetupTest()
+		suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+		suite.mockDBClient.On("QueryContext", context.Background(),
+			queryGetResourceServerInterfaceByIdentifier, "https://api.example.com/orders", "test-deployment").
+			Return([]map[string]interface{}{
+				{
+					"id":                 "rsi1",
+					"resource_server_id": "rs1",
+					"type":               "API",
+					"identifier":         "https://api.example.com/orders",
+				},
+			}, nil)
+
+		rsi, err := suite.store.GetResourceServerInterfaceByIdentifier(
+			context.Background(), "https://api.example.com/orders")
+
+		suite.NoError(err)
+		suite.Equal("rsi1", rsi.ID)
+		suite.Equal("rs1", rsi.ResourceServerID)
+		suite.Equal(providers.ResourceServerInterfaceTypeAPI, rsi.Type)
+	})
+
+	suite.Run("NotFound", func() {
+		suite.SetupTest()
+		suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+		suite.mockDBClient.On("QueryContext", context.Background(),
+			queryGetResourceServerInterfaceByIdentifier, "https://unknown.example.com", "test-deployment").
+			Return([]map[string]interface{}{}, nil)
+
+		_, err := suite.store.GetResourceServerInterfaceByIdentifier(
+			context.Background(), "https://unknown.example.com")
+
+		suite.Equal(errResourceServerInterfaceNotFound, err)
+	})
+}
+
+func (suite *ResourceStoreTestSuite) TestListResourceServerInterfaces() {
+	suite.Run("Success", func() {
+		suite.SetupTest()
+		suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+		suite.mockDBClient.On("QueryContext", context.Background(),
+			queryGetResourceServerInterfaceList, "rs1", "test-deployment").
+			Return([]map[string]interface{}{
+				{
+					"id":                 "rsi1",
+					"resource_server_id": "rs1",
+					"type":               "API",
+					"identifier":         "https://api.example.com/system",
+				},
+				{
+					"id":                 "rsi2",
+					"resource_server_id": "rs1",
+					"type":               "MCP",
+					"identifier":         "https://localhost:8090/mcp",
+				},
+			}, nil)
+
+		interfaces, err := suite.store.ListResourceServerInterfaces(context.Background(), "rs1")
+
+		suite.NoError(err)
+		suite.Len(interfaces, 2)
+		suite.Equal(providers.ResourceServerInterfaceTypeAPI, interfaces[0].Type)
+		suite.Equal(providers.ResourceServerInterfaceTypeMCP, interfaces[1].Type)
+		suite.Equal("https://localhost:8090/mcp", interfaces[1].Identifier)
+	})
+
+	suite.Run("Empty", func() {
+		suite.SetupTest()
+		suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+		suite.mockDBClient.On("QueryContext", context.Background(),
+			queryGetResourceServerInterfaceList, "rs1", "test-deployment").
+			Return([]map[string]interface{}{}, nil)
+
+		interfaces, err := suite.store.ListResourceServerInterfaces(context.Background(), "rs1")
+
+		suite.NoError(err)
+		suite.Empty(interfaces)
+	})
+
+	suite.Run("QueryError", func() {
+		suite.SetupTest()
+		suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+		suite.mockDBClient.On("QueryContext", context.Background(),
+			queryGetResourceServerInterfaceList, "rs1", "test-deployment").
+			Return(nil, errors.New("query error"))
+
+		_, err := suite.store.ListResourceServerInterfaces(context.Background(), "rs1")
+
+		suite.Error(err)
+		suite.Contains(err.Error(), "failed to list resource server interfaces")
+	})
+}
+
+func (suite *ResourceStoreTestSuite) TestUpdateResourceServerInterface() {
+	suite.Run("Success", func() {
+		suite.SetupTest()
+		suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+		suite.mockDBClient.On("ExecuteContext", context.Background(),
+			queryUpdateResourceServerInterface, "API", "https://api.example.com/v2",
+			"rsi1", "test-deployment").
+			Return(int64(1), nil)
+
+		err := suite.store.UpdateResourceServerInterface(context.Background(),
+			providers.ResourceServerInterface{
+				ID:         "rsi1",
+				Type:       providers.ResourceServerInterfaceTypeAPI,
+				Identifier: "https://api.example.com/v2",
+			})
+
+		suite.NoError(err)
+	})
+
+	suite.Run("ExecuteError", func() {
+		suite.SetupTest()
+		suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+		suite.mockDBClient.On("ExecuteContext", context.Background(),
+			queryUpdateResourceServerInterface, "API", "https://api.example.com/v2",
+			"rsi1", "test-deployment").
+			Return(int64(0), errors.New("update failed"))
+
+		err := suite.store.UpdateResourceServerInterface(context.Background(),
+			providers.ResourceServerInterface{
+				ID:         "rsi1",
+				Type:       providers.ResourceServerInterfaceTypeAPI,
+				Identifier: "https://api.example.com/v2",
+			})
+
+		suite.Error(err)
+		suite.Contains(err.Error(), "failed to update resource server interface")
+	})
+}
+
+func (suite *ResourceStoreTestSuite) TestDeleteResourceServerInterface() {
+	suite.Run("Success", func() {
+		suite.SetupTest()
+		suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+		suite.mockDBClient.On("ExecuteContext", context.Background(),
+			queryDeleteResourceServerInterface, "rsi1", "test-deployment").
+			Return(int64(1), nil)
+
+		err := suite.store.DeleteResourceServerInterface(context.Background(), "rsi1")
+
+		suite.NoError(err)
+	})
+
+	suite.Run("ExecuteError", func() {
+		suite.SetupTest()
+		suite.mockDBProvider.On("GetConfigDBClient").Return(suite.mockDBClient, nil)
+		suite.mockDBClient.On("ExecuteContext", context.Background(),
+			queryDeleteResourceServerInterface, "rsi1", "test-deployment").
+			Return(int64(0), errors.New("delete failed"))
+
+		err := suite.store.DeleteResourceServerInterface(context.Background(), "rsi1")
+
+		suite.Error(err)
+		suite.Contains(err.Error(), "failed to delete resource server interface")
+	})
 }

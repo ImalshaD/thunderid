@@ -72,7 +72,7 @@ func (ts *TokenTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "Token Default Resource Server",
 		Description: "Resource server for token integration tests",
-		Identifier:  tokenDefaultResourceServerIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: tokenDefaultResourceServerIdentifier},
 		OUID:        ts.ouID,
 	}, []testutils.Action{})
 	if err != nil {

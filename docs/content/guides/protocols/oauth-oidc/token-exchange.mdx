@@ -33,7 +33,7 @@ Typical uses:
 | `actor_token_type` (input) | Same set as `subject_token_type`; used for delegation chains |
 | `requested_token_type` (output) | `urn:ietf:params:oauth:token-type:access_token` · `:jwt` only. **`id_token` and `refresh_token` outputs are not supported.** |
 | `audience` parameter | Accepted for RFC 8693 compatibility but does not determine the issued access token's `aud` claim |
-| `resource` parameter | RFC 8707 resource indicator. The issued access token is bound to exactly this resource server. Permission-bearing requests use `defaultResourceServer` when it is omitted. OIDC-only or scopeless requests use the application's `token.accessToken.defaultAudience`, falling back to `client_id` |
+| `resource` parameter | RFC 8707 resource indicator. The issued access token is bound to the resource server interface with this identifier. Permission-bearing requests use the configured default resource server interface when it is omitted. OIDC-only or scopeless requests use the application's `token.accessToken.defaultAudience`, falling back to `client_id` |
 | `scope` parameter | Requested scopes; downscoping is allowed, widening is rejected with `invalid_scope`. Final scopes must also be permissions on the target resource server and authorized for the issuing app or agent. |
 | Client authentication | Required, same methods as the token endpoint |
 | Issued token shape | `issued_token_type` is echoed in the response so the caller knows what it received |

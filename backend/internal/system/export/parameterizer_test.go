@@ -1887,16 +1887,20 @@ func TestEntityTypeExportFormat(t *testing.T) {
 // Resource Server Export Scenario Tests
 // =============================================================================
 
-// TestResourceServerExport_IdentifierAndOUIDNotParameterized verifies that when
-// GetResourceRules() returns nil, the identifier and ou_id fields are emitted as
+// TestResourceServerExport_InterfaceIdentifierAndOUIDNotParameterized verifies that when
+// GetResourceRules() returns nil, the interface identifier and ou_id fields are emitted as
 // literal values and NOT replaced with Go template placeholders ({{.…}}).
-func TestResourceServerExport_IdentifierAndOUIDNotParameterized(t *testing.T) {
+func TestResourceServerExport_InterfaceIdentifierAndOUIDNotParameterized(t *testing.T) {
 	rs := &providers.ResourceServer{
-		ID:         "019ddcf3-c67c-7521-a3a1-6744abb241a7",
-		Name:       "System",
-		Identifier: "system",
-		OUID:       "019ddcf3-c5d8-7375-80e3-c5bf524257c8",
-		Delimiter:  ":",
+		ID:        "019ddcf3-c67c-7521-a3a1-6744abb241a7",
+		Name:      "System",
+		OUID:      "019ddcf3-c5d8-7375-80e3-c5bf524257c8",
+		Delimiter: ":",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:         "019ddcf3-c67c-7521-a3a1-6744abb241a8",
+			Type:       providers.ResourceServerInterfaceTypeMCP,
+			Identifier: "https://localhost:8090/mcp",
+		}},
 	}
 
 	p := newParameterizer(templatingRules{})
@@ -1904,9 +1908,9 @@ func TestResourceServerExport_IdentifierAndOUIDNotParameterized(t *testing.T) {
 	result, vars, err := p.ToParameterizedYAML(context.Background(), rs, "ResourceServer", "System", nil)
 	require.NoError(t, err)
 
-	// identifier must be the literal value, not a template variable
-	assert.Contains(t, result, "identifier: system",
-		"identifier should be emitted as a literal value")
+	// the interface identifier must be the literal value, not a template variable
+	assert.Contains(t, result, "identifier: https://localhost:8090/mcp",
+		"interface identifier should be emitted as a literal value")
 	assert.NotContains(t, result, "{{.SYSTEM_IDENTIFIER}}",
 		"identifier must not be parameterized")
 
@@ -1924,11 +1928,15 @@ func TestResourceServerExport_IdentifierAndOUIDNotParameterized(t *testing.T) {
 // wrapped in double quotes in the exported YAML (yamlfmt:"quoted" tag).
 func TestResourceServerExport_DelimiterIsQuoted(t *testing.T) {
 	rs := &providers.ResourceServer{
-		ID:         "019ddcf3-c67c-7521-a3a1-6744abb241a7",
-		Name:       "System",
-		Identifier: "system",
-		OUID:       "019ddcf3-c5d8-7375-80e3-c5bf524257c8",
-		Delimiter:  ":",
+		ID:        "019ddcf3-c67c-7521-a3a1-6744abb241a7",
+		Name:      "System",
+		OUID:      "019ddcf3-c5d8-7375-80e3-c5bf524257c8",
+		Delimiter: ":",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:         "019ddcf3-c67c-7521-a3a1-6744abb241a8",
+			Type:       providers.ResourceServerInterfaceTypeMCP,
+			Identifier: "https://localhost:8090/mcp",
+		}},
 	}
 
 	p := newParameterizer(templatingRules{})

@@ -111,7 +111,7 @@ func (ts *UserInfoTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "UserInfo Default Resource Server",
 		Description: "Resource server for userinfo integration tests",
-		Identifier:  userInfoDefaultResourceServerIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: userInfoDefaultResourceServerIdentifier},
 		OUID:        ts.ouID,
 	}, []testutils.Action{})
 	ts.Require().NoError(err, "Failed to create resource server")

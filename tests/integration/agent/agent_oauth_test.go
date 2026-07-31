@@ -87,7 +87,7 @@ func (ts *AgentOAuthFlowsTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "Agent OAuth Default Resource Server",
 		Description: "Resource server for agent OAuth flow tests",
-		Identifier:  agentOAuthDefaultRSIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: agentOAuthDefaultRSIdentifier},
 		OUID:        ts.ouID,
 	}, []testutils.Action{})
 	ts.Require().NoError(err, "Failed to create resource server")
@@ -590,7 +590,7 @@ func (s *CCAgentAuthzTestSuite) SetupSuite() {
 	rsID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "CC Agent Authz API",
 		Description: "Resource server for CC agent authz testing",
-		Identifier:  ccAgentAuthzRSIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: ccAgentAuthzRSIdentifier},
 		OUID:        s.ouID,
 	}, []testutils.Action{
 		{Name: "Read", Handle: "read", Description: "Read access"},
@@ -842,7 +842,7 @@ func (s *AgentTokenExchangeTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "Agent Token Exchange Default Resource Server",
 		Description: "Resource server for agent token exchange tests",
-		Identifier:  agentTEDefaultRSIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: agentTEDefaultRSIdentifier},
 		OUID:        s.ouID,
 	}, []testutils.Action{})
 	s.Require().NoError(err)

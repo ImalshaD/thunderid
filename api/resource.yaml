@@ -5,7 +5,7 @@ info:
   description: |
     Resource servers in ThunderID define the permission namespace for a protected API or service; resources and actions nested within them form the permission strings used in role assignments.
     Resources can be nested hierarchically, and permissions are derived from the handle-based path structure.
-    Resource Server identifier is optional and if provided, must be unique within the system.
+    A resource server can expose zero or more interfaces, each of type API or MCP. Each interface owns an audience identifier, which must be unique within the deployment and can be used in RFC 8707 resource indicator flows. One resource server can therefore expose the same permissions through API and MCP audiences without duplicating them. An optional initial interface can be supplied during resource-server creation, and additional interfaces are managed through the nested interfaces endpoints.
     Resource, and Action handles are unique under it's parent and are immutable after creation and used directly for permission derivation.
     Resource parent hierarchy is immutable after creation.
   license:
@@ -57,17 +57,29 @@ paths:
                   - id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                     name: "Booking System"
                     description: "Handles all booking operations"
-                    identifier: "https://api.example.com/booking"
-                    type: "API"
                     ouId: "a839f4bd-39dc-4eaa-b5cc-210d8ecaee87"
                     delimiter: ":"
+                    interfaces:
+                      - id: "9c6a1f34-1c2f-4d1e-9a2b-2f4c8f1d5e60"
+                        type: "API"
+                        identifier: "https://api.example.com/booking"
+                        isReadOnly: false
+                      - id: "b1d9a4e2-3f77-4a56-8c31-7d0e5a9b4c12"
+                        type: "MCP"
+                        identifier: "https://api.example.com/booking/mcp"
+                        isReadOnly: false
+                    isReadOnly: false
                   - id: "257e528f-eb24-48b6-884d-20460e190957"
                     name: "Property Management"
                     description: "Property and facility management"
-                    identifier: "https://api.example.com/property"
-                    type: "CUSTOM"
                     ouId: "a839f4bd-39dc-4eaa-b5cc-210d8ecaee87"
                     delimiter: ":"
+                    interfaces:
+                      - id: "4e2b7c19-88a5-4f3e-9d64-1c7a3b5e8f92"
+                        type: "API"
+                        identifier: "https://api.example.com/property"
+                        isReadOnly: false
+                    isReadOnly: false
                 links:
                   - href: "resource-servers?offset=2&limit=2"
                     rel: "next"
@@ -137,8 +149,10 @@ paths:
             example:
               name: "Booking System"
               description: "Handles all booking operations"
-              identifier: "https://api.example.com/booking"
               ouId: "a839f4bd-39dc-4eaa-b5cc-210d8ecaee87"
+              interface:
+                type: "API"
+                identifier: "https://api.example.com/booking"
       responses:
         "201":
           description: Resource server created
@@ -150,10 +164,14 @@ paths:
                 id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                 name: "Booking System"
                 description: "Handles all booking operations"
-                identifier: "https://api.example.com/booking"
-                type: "CUSTOM"
                 ouId: "a839f4bd-39dc-4eaa-b5cc-210d8ecaee87"
                 delimiter: ":"
+                interfaces:
+                  - id: "9c6a1f34-1c2f-4d1e-9a2b-2f4c8f1d5e60"
+                    type: "API"
+                    identifier: "https://api.example.com/booking"
+                    isReadOnly: false
+                isReadOnly: false
         "400":
           description: Bad request
           content:
@@ -217,7 +235,7 @@ paths:
                       defaultValue: "Identifier conflict"
                     description:
                       key: "error.resourceservice.identifier_conflict_description"
-                      defaultValue: "A resource server with the same identifier already exists"
+                      defaultValue: "A resource server interface with the same identifier already exists"
         "500":
           description: Internal server error
           content:
@@ -257,10 +275,18 @@ paths:
                 id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                 name: "Booking System"
                 description: "Handles all booking operations"
-                identifier: "https://api.example.com/booking"
-                type: "API"
                 ouId: "a839f4bd-39dc-4eaa-b5cc-210d8ecaee87"
                 delimiter: ":"
+                interfaces:
+                  - id: "9c6a1f34-1c2f-4d1e-9a2b-2f4c8f1d5e60"
+                    type: "API"
+                    identifier: "https://api.example.com/booking"
+                    isReadOnly: false
+                  - id: "b1d9a4e2-3f77-4a56-8c31-7d0e5a9b4c12"
+                    type: "MCP"
+                    identifier: "https://api.example.com/booking/mcp"
+                    isReadOnly: false
+                isReadOnly: false
         "400":
           description: Bad request
           content:
@@ -308,7 +334,7 @@ paths:
       tags:
         - Resource Servers
       summary: Update resource server
-      description: Updates resource server name, description, identifier, and organization unit.
+      description: Updates resource server name, description and organization unit. Interfaces are managed through the nested interfaces endpoints.
       parameters:
         - in: path
           name: id
@@ -325,7 +351,6 @@ paths:
             example:
               name: "Booking System Updated"
               description: "Updated description for booking operations"
-              identifier: "https://api.example.com/booking/v2"
               ouId: "a839f4bd-39dc-4eaa-b5cc-210d8ecaee87"
       responses:
         "200":
@@ -338,10 +363,14 @@ paths:
                 id: "3fa85f64-5717-4562-b3fc-2c963f66afa6"
                 name: "Booking System Updated"
                 description: "Updated description for booking operations"
-                identifier: "https://api.example.com/booking/v2"
-                type: "API"
                 ouId: "a839f4bd-39dc-4eaa-b5cc-210d8ecaee87"
                 delimiter: ":"
+                interfaces:
+                  - id: "9c6a1f34-1c2f-4d1e-9a2b-2f4c8f1d5e60"
+                    type: "API"
+                    identifier: "https://api.example.com/booking"
+                    isReadOnly: false
+                isReadOnly: false
         "400":
           description: Bad request
           content:
@@ -429,7 +458,7 @@ paths:
                       defaultValue: "Identifier conflict"
                     description:
                       key: "error.resourceservice.identifier_conflict_description"
-                      defaultValue: "A resource server with the same identifier already exists"
+                      defaultValue: "A resource server interface with the same identifier already exists"
         "500":
           description: Internal server error
           content:
@@ -511,6 +540,216 @@ paths:
                 description:
                   key: "error.internal_server_error_description"
                   defaultValue: "An unexpected error occurred while processing the request"
+
+  /resource-servers/{rsId}/interfaces:
+    get:
+      tags:
+        - Resource Server Interfaces
+      summary: List the interfaces of a resource server
+      description: Returns every interface through which the resource server is accessed.
+      parameters:
+        - name: rsId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the resource server
+      responses:
+        "200":
+          description: List of interfaces
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceServerInterfaceListResponse'
+              example:
+                totalResults: 2
+                interfaces:
+                  - id: "9c6a1f34-1c2f-4d1e-9a2b-2f4c8f1d5e60"
+                    type: "API"
+                    identifier: "https://api.example.com/booking"
+                    isReadOnly: false
+                  - id: "b1d9a4e2-3f77-4a56-8c31-7d0e5a9b4c12"
+                    type: "MCP"
+                    identifier: "https://api.example.com/booking/mcp"
+                    isReadOnly: false
+        "404":
+          $ref: '#/components/responses/ResourceServerNotFound'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      tags:
+        - Resource Server Interfaces
+      summary: Add an interface to a resource server
+      description: |
+        Adds an interface to an existing resource server. The identifier must be unique across the deployment. A resource server may expose several interfaces of the same type as long as their identifiers differ. Permissions and role assignments are unaffected: they belong to the resource server.
+      parameters:
+        - name: rsId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the resource server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceServerInterfaceRequest'
+            example:
+              type: "MCP"
+              identifier: "https://api.example.com/booking/mcp"
+      responses:
+        "201":
+          description: Interface created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceServerInterface'
+              example:
+                id: "b1d9a4e2-3f77-4a56-8c31-7d0e5a9b4c12"
+                type: "MCP"
+                identifier: "https://api.example.com/booking/mcp"
+                isReadOnly: false
+        "400":
+          $ref: '#/components/responses/InvalidInterface'
+        "404":
+          $ref: '#/components/responses/ResourceServerNotFound'
+        "409":
+          $ref: '#/components/responses/InterfaceIdentifierConflict'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+
+  /resource-servers/{rsId}/interfaces/{id}:
+    get:
+      tags:
+        - Resource Server Interfaces
+      summary: Get an interface of a resource server
+      parameters:
+        - name: rsId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the resource server
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the interface
+      responses:
+        "200":
+          description: Interface details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceServerInterface'
+              example:
+                id: "b1d9a4e2-3f77-4a56-8c31-7d0e5a9b4c12"
+                type: "MCP"
+                identifier: "https://api.example.com/booking/mcp"
+                isReadOnly: false
+        "404":
+          $ref: '#/components/responses/InterfaceNotFound'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      tags:
+        - Resource Server Interfaces
+      summary: Update an interface of a resource server
+      description: |
+        Updates the type and identifier of an interface. Changing the identifier changes the audience of tokens issued for this interface from that point on; tokens already issued keep their original audience. An interface cannot be moved to another resource server.
+      parameters:
+        - name: rsId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the resource server
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the interface
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceServerInterfaceRequest'
+            example:
+              type: "MCP"
+              identifier: "https://api.example.com/booking/mcp/v2"
+      responses:
+        "200":
+          description: Interface updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceServerInterface'
+              example:
+                id: "b1d9a4e2-3f77-4a56-8c31-7d0e5a9b4c12"
+                type: "MCP"
+                identifier: "https://api.example.com/booking/mcp/v2"
+                isReadOnly: false
+        "400":
+          $ref: '#/components/responses/InvalidInterface'
+        "404":
+          $ref: '#/components/responses/InterfaceNotFound'
+        "409":
+          $ref: '#/components/responses/InterfaceIdentifierConflict'
+        "500":
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      tags:
+        - Resource Server Interfaces
+      summary: Delete an interface of a resource server
+      description: |
+        Deletes an interface. A resource server may be left with no interfaces, in which case it still defines permissions but has no audience. Deleting an interface that is not present succeeds. Deleting the interface configured as the deployment default is rejected while it holds that role.
+      parameters:
+        - name: rsId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the resource server
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID of the interface
+      responses:
+        "204":
+          description: Interface deleted
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                cannot-delete:
+                  summary: Interface is referenced by server configuration
+                  value:
+                    code: "RES-1006"
+                    message:
+                      key: "error.resourceservice.cannot_delete"
+                      defaultValue: "Cannot delete"
+                    description:
+                      key: "error.resourceservice.cannot_delete_description"
+                      defaultValue: "Cannot delete resource server/resource that has dependencies"
+        "500":
+          $ref: '#/components/responses/InternalServerError'
 
   /resource-servers/{rsId}/resources:
     get:
@@ -2260,10 +2499,99 @@ components:
         minimum: 0
         default: 0
 
+  responses:
+    ResourceServerNotFound:
+      description: Resource server not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "RES-1003"
+            message:
+              key: "error.resourceservice.resource_server_not_found"
+              defaultValue: "Resource server not found"
+            description:
+              key: "error.resourceservice.resource_server_not_found_description"
+              defaultValue: "The resource server with the specified id does not exist"
+
+    InterfaceNotFound:
+      description: Resource server interface not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "RES-1024"
+            message:
+              key: "error.resourceservice.resource_server_interface_not_found"
+              defaultValue: "Resource server interface not found"
+            description:
+              key: "error.resourceservice.resource_server_interface_not_found_description"
+              defaultValue: "The resource server interface with the specified id does not exist"
+
+    InvalidInterface:
+      description: Invalid interface type or identifier
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalid-interface-type:
+              summary: Unsupported interface type
+              value:
+                code: "RES-1025"
+                message:
+                  key: "error.resourceservice.invalid_interface_type"
+                  defaultValue: "Invalid interface type"
+                description:
+                  key: "error.resourceservice.invalid_interface_type_description"
+                  defaultValue: "The interface type must be either API or MCP"
+            invalid-interface-identifier:
+              summary: Identifier is empty
+              value:
+                code: "RES-1026"
+                message:
+                  key: "error.resourceservice.invalid_interface_identifier"
+                  defaultValue: "Invalid interface identifier"
+                description:
+                  key: "error.resourceservice.invalid_interface_identifier_description"
+                  defaultValue: "The interface identifier cannot be empty"
+
+    InterfaceIdentifierConflict:
+      description: Interface identifier already in use
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "RES-1013"
+            message:
+              key: "error.resourceservice.identifier_conflict"
+              defaultValue: "Identifier conflict"
+            description:
+              key: "error.resourceservice.identifier_conflict_description"
+              defaultValue: "A resource server interface with the same identifier already exists"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "RES-5000"
+            message:
+              key: "error.internal_server_error"
+              defaultValue: "Internal server error"
+            description:
+              key: "error.internal_server_error_description"
+              defaultValue: "An unexpected error occurred while processing the request"
+
   schemas:
     ResourceServer:
       type: object
-      required: [id, name, identifier, type, ouId, delimiter]
+      required: [id, name, ouId, delimiter, interfaces]
       properties:
         id:
           type: string
@@ -2276,13 +2604,6 @@ components:
           type: string
           nullable: true
           description: Optional description of the resource server
-        identifier:
-          type: string
-          description: Unique identifier for this resource server. When set to an absolute URI, the resource server is used in RFC 8707 resource indicator flows and the identifier is used as the access token audience claim value.
-        type:
-          type: string
-          enum: [API, MCP, CUSTOM]
-          description: Immutable type of the resource server (metadata only). Defaults to CUSTOM when not provided at creation.
         ouId:
           type: string
           format: uuid
@@ -2290,13 +2611,61 @@ components:
         delimiter:
           type: string
           description: Character used to separate permission hierarchy levels (immutable after creation)
+        interfaces:
+          type: array
+          description: The interfaces through which this resource server is accessed. Resources, actions, permissions and role assignments belong to the resource server itself and are shared by every interface.
+          items:
+            $ref: '#/components/schemas/ResourceServerInterface'
         isReadOnly:
           type: boolean
           description: Whether the resource server is read-only (system-managed)
 
+    ResourceServerInterface:
+      type: object
+      required: [id, type, identifier]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the interface
+        type:
+          type: string
+          enum: [API, MCP]
+          description: How the resource server is accessed through this interface
+        identifier:
+          type: string
+          description: Audience identifier of this interface, unique across the deployment. It becomes the access token audience claim value. A client can pass it in the RFC 8707 resource parameter when it is an absolute URI, which that parameter requires.
+        isReadOnly:
+          type: boolean
+          description: Whether the interface is read-only (system-managed)
+
+    ResourceServerInterfaceListResponse:
+      type: object
+      required: [totalResults, interfaces]
+      properties:
+        totalResults:
+          type: integer
+          description: Number of interfaces the resource server exposes
+        interfaces:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceServerInterface'
+
+    ResourceServerInterfaceRequest:
+      type: object
+      required: [type, identifier]
+      properties:
+        type:
+          type: string
+          enum: [API, MCP]
+          description: How the resource server is accessed through this interface
+        identifier:
+          type: string
+          description: Audience identifier of this interface. Must be non-empty and unique across the deployment. Use an absolute URI if clients are to request it through the RFC 8707 resource parameter.
+
     CreateResourceServerRequest:
       type: object
-      required: [name, ouId, identifier]
+      required: [name, ouId]
       properties:
         name:
           type: string
@@ -2304,13 +2673,6 @@ components:
         description:
           type: string
           description: Optional description of the resource server
-        identifier:
-          type: string
-          description: Unique identifier for this resource server. When set to an absolute URI, the resource server is used in RFC 8707 resource indicator flows and clients can use this value in the resource parameter to request audience-restricted access tokens.
-        type:
-          type: string
-          enum: [API, MCP, CUSTOM]
-          description: Optional immutable type of the resource server (metadata only). Defaults to CUSTOM when not provided.
         ouId:
           type: string
           format: uuid
@@ -2318,6 +2680,10 @@ components:
         delimiter:
           type: string
           description: Optional delimiter character for permission hierarchy (defaults to ":", immutable after creation)
+        interface:
+          allOf:
+            - $ref: '#/components/schemas/ResourceServerInterfaceRequest'
+          description: Optional initial interface, created together with the resource server. Omit it to create a resource server that defines permissions but has no audience yet, then add interfaces through the nested interfaces endpoints.
 
     UpdateResourceServerRequest:
       type: object
@@ -2329,9 +2695,6 @@ components:
         description:
           type: string
           description: Optional description of the resource server
-        identifier:
-          type: string
-          description: Unique identifier for this resource server. When set to an absolute URI, the resource server is used in RFC 8707 resource indicator flows.
         ouId:
           type: string
           format: uuid

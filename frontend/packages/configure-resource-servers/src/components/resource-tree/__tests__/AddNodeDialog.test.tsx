@@ -165,54 +165,6 @@ describe('AddNodeDialog', () => {
     expect(addButton).toBeDisabled();
   });
 
-  it('renders the Add tool permission title when mode is mcp-server-tool', () => {
-    renderWithProviders(<AddNodeDialog {...defaultProps} mode="mcp-server-tool" />);
-
-    expect(screen.getByText('Add tool permission')).toBeInTheDocument();
-  });
-
-  it('renders the Add resource permission title when mode is mcp-server-resource', () => {
-    renderWithProviders(<AddNodeDialog {...defaultProps} mode="mcp-server-resource" />);
-
-    expect(screen.getByText('Add resource permission')).toBeInTheDocument();
-  });
-
-  it('sends kind=tool in the create payload for mcp-server-tool mode', async () => {
-    renderWithProviders(<AddNodeDialog {...defaultProps} mode="mcp-server-tool" delimiter=":" />);
-
-    const textboxes = screen.getAllByRole('textbox');
-    fireEvent.change(textboxes[0], {target: {value: 'Search Files'}});
-
-    await waitFor(() => expect(textboxes[1]).toHaveValue('search-files'));
-
-    fireEvent.click(screen.getByRole('button', {name: /^add$/i}));
-
-    await waitFor(() => {
-      expect(mockCreateActionMutate).toHaveBeenCalledWith(
-        expect.objectContaining({kind: 'tool', name: 'Search Files', handle: 'search-files'}),
-        expect.any(Object),
-      );
-    });
-  });
-
-  it('sends kind=resource in the create payload for mcp-server-resource mode', async () => {
-    renderWithProviders(<AddNodeDialog {...defaultProps} mode="mcp-server-resource" delimiter=":" />);
-
-    const textboxes = screen.getAllByRole('textbox');
-    fireEvent.change(textboxes[0], {target: {value: 'File Contents'}});
-
-    await waitFor(() => expect(textboxes[1]).toHaveValue('file-contents'));
-
-    fireEvent.click(screen.getByRole('button', {name: /^add$/i}));
-
-    await waitFor(() => {
-      expect(mockCreateActionMutate).toHaveBeenCalledWith(
-        expect.objectContaining({kind: 'resource', name: 'File Contents', handle: 'file-contents'}),
-        expect.any(Object),
-      );
-    });
-  });
-
   it('shows generic resource placeholders in resource mode', () => {
     renderWithProviders(<AddNodeDialog {...defaultProps} mode="resource" />);
 
@@ -229,14 +181,5 @@ describe('AddNodeDialog', () => {
     expect(textboxes[0]).toHaveAttribute('placeholder', 'e.g. Read');
     expect(textboxes[1]).toHaveAttribute('placeholder', 'e.g. read');
     expect(textboxes[2]).toHaveAttribute('placeholder', 'e.g. Grants read access to the resource');
-  });
-
-  it('shows tool placeholders in mcp-server-tool mode', () => {
-    renderWithProviders(<AddNodeDialog {...defaultProps} mode="mcp-server-tool" />);
-
-    const textboxes = screen.getAllByRole('textbox');
-    expect(textboxes[0]).toHaveAttribute('placeholder', 'e.g. Send message');
-    expect(textboxes[1]).toHaveAttribute('placeholder', 'e.g. send-message');
-    expect(textboxes[2]).toHaveAttribute('placeholder', 'e.g. Sends a message to the specified channel');
   });
 });

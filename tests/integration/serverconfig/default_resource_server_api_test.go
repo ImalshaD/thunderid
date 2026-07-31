@@ -30,67 +30,67 @@ import (
 	"github.com/thunder-id/thunderid/tests/integration/testutils"
 )
 
-type DefaultResourceServerAPITestSuite struct {
+type DefaultResourceServerInterfaceAPITestSuite struct {
 	suite.Suite
 	adminClient *http.Client
 }
 
-func TestDefaultResourceServerAPITestSuite(t *testing.T) {
-	suite.Run(t, new(DefaultResourceServerAPITestSuite))
+func TestDefaultResourceServerInterfaceAPITestSuite(t *testing.T) {
+	suite.Run(t, new(DefaultResourceServerInterfaceAPITestSuite))
 }
 
-func (suite *DefaultResourceServerAPITestSuite) SetupSuite() {
+func (suite *DefaultResourceServerInterfaceAPITestSuite) SetupSuite() {
 	suite.adminClient = testutils.GetHTTPClient()
 }
 
-func (suite *DefaultResourceServerAPITestSuite) SetupTest()     { suite.clear() }
-func (suite *DefaultResourceServerAPITestSuite) TearDownSuite() { suite.clear() }
+func (suite *DefaultResourceServerInterfaceAPITestSuite) SetupTest()     { suite.clear() }
+func (suite *DefaultResourceServerInterfaceAPITestSuite) TearDownSuite() { suite.clear() }
 
-func (suite *DefaultResourceServerAPITestSuite) TestListIncludesSection() {
+func (suite *DefaultResourceServerInterfaceAPITestSuite) TestListIncludesSection() {
 	status, body := suite.get(serverConfigURL)
 	suite.Require().Equal(http.StatusOK, status)
 
 	var names []string
 	suite.Require().NoError(json.Unmarshal(body, &names))
-	suite.Contains(names, "defaultResourceServer")
+	suite.Contains(names, "defaultResourceServerInterface")
 }
 
-func (suite *DefaultResourceServerAPITestSuite) TestPutExistingIDPersistsAndReads() {
-	status, _ := suite.put(`{"resourceServerId":"` + systemResourceServerID + `"}`)
+func (suite *DefaultResourceServerInterfaceAPITestSuite) TestPutExistingInterfaceIDPersistsAndReads() {
+	status, _ := suite.put(`{"resourceServerInterfaceId":"` + systemResourceServerInterfaceID + `"}`)
 	suite.Require().Equal(http.StatusOK, status)
 
 	layers := suite.getLayers()
-	suite.Equal(systemResourceServerID, layers.Writable.ResourceServerID)
-	suite.Equal(systemResourceServerID, layers.Merged.ResourceServerID)
+	suite.Equal(systemResourceServerInterfaceID, layers.Writable.ResourceServerInterfaceID)
+	suite.Equal(systemResourceServerInterfaceID, layers.Merged.ResourceServerInterfaceID)
 }
 
-func (suite *DefaultResourceServerAPITestSuite) TestPutUnknownIDReturns400AndDoesNotPersist() {
-	status, body := suite.put(`{"resourceServerId":"00000000-0000-0000-0000-000000000000"}`)
+func (suite *DefaultResourceServerInterfaceAPITestSuite) TestPutUnknownInterfaceIDReturns400AndDoesNotPersist() {
+	status, body := suite.put(`{"resourceServerInterfaceId":"00000000-0000-0000-0000-000000000000"}`)
 	suite.Equal(http.StatusBadRequest, status)
 	suite.Equal("SCF-1003", suite.errorCode(body))
 
-	suite.Empty(suite.getLayers().Writable.ResourceServerID)
+	suite.Empty(suite.getLayers().Writable.ResourceServerInterfaceID)
 }
 
-func (suite *DefaultResourceServerAPITestSuite) TestClearIsAccepted() {
-	suite.Require().Equal(http.StatusOK, suite.mustPut(`{"resourceServerId":"`+systemResourceServerID+`"}`))
+func (suite *DefaultResourceServerInterfaceAPITestSuite) TestClearIsAccepted() {
+	suite.Require().Equal(http.StatusOK, suite.mustPut(`{"resourceServerInterfaceId":"`+systemResourceServerInterfaceID+`"}`))
 
-	status, _ := suite.put(`{"resourceServerId":""}`)
+	status, _ := suite.put(`{"resourceServerInterfaceId":""}`)
 	suite.Require().Equal(http.StatusOK, status)
-	suite.Empty(suite.getLayers().Writable.ResourceServerID)
+	suite.Empty(suite.getLayers().Writable.ResourceServerInterfaceID)
 }
 
-func (suite *DefaultResourceServerAPITestSuite) clear() {
-	suite.Require().Equal(http.StatusOK, suite.mustPut(`{"resourceServerId":""}`))
+func (suite *DefaultResourceServerInterfaceAPITestSuite) clear() {
+	suite.Require().Equal(http.StatusOK, suite.mustPut(`{"resourceServerInterfaceId":""}`))
 }
 
-func (suite *DefaultResourceServerAPITestSuite) mustPut(body string) int {
+func (suite *DefaultResourceServerInterfaceAPITestSuite) mustPut(body string) int {
 	status, _ := suite.put(body)
 	return status
 }
 
-func (suite *DefaultResourceServerAPITestSuite) put(body string) (int, []byte) {
-	req, err := http.NewRequest(http.MethodPut, defaultResourceServerConfigURL, strings.NewReader(body))
+func (suite *DefaultResourceServerInterfaceAPITestSuite) put(body string) (int, []byte) {
+	req, err := http.NewRequest(http.MethodPut, defaultResourceServerInterfaceConfigURL, strings.NewReader(body))
 	suite.Require().NoError(err)
 	req.Header.Set("Content-Type", "application/json")
 
@@ -103,7 +103,7 @@ func (suite *DefaultResourceServerAPITestSuite) put(body string) (int, []byte) {
 	return resp.StatusCode, respBody
 }
 
-func (suite *DefaultResourceServerAPITestSuite) get(url string) (int, []byte) {
+func (suite *DefaultResourceServerInterfaceAPITestSuite) get(url string) (int, []byte) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	suite.Require().NoError(err)
 
@@ -116,15 +116,15 @@ func (suite *DefaultResourceServerAPITestSuite) get(url string) (int, []byte) {
 	return resp.StatusCode, body
 }
 
-func (suite *DefaultResourceServerAPITestSuite) getLayers() defaultResourceServerLayers {
-	status, body := suite.get(defaultResourceServerConfigURL)
+func (suite *DefaultResourceServerInterfaceAPITestSuite) getLayers() defaultResourceServerInterfaceLayers {
+	status, body := suite.get(defaultResourceServerInterfaceConfigURL)
 	suite.Require().Equal(http.StatusOK, status)
-	var layers defaultResourceServerLayers
+	var layers defaultResourceServerInterfaceLayers
 	suite.Require().NoError(json.Unmarshal(body, &layers))
 	return layers
 }
 
-func (suite *DefaultResourceServerAPITestSuite) errorCode(body []byte) string {
+func (suite *DefaultResourceServerInterfaceAPITestSuite) errorCode(body []byte) string {
 	var errResp apiErrorResponse
 	suite.Require().NoError(json.Unmarshal(body, &errResp))
 	return errResp.Code

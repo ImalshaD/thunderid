@@ -40,8 +40,8 @@ const {default: useSetDefaultResourceServer} = await import('../useSetDefaultRes
 describe('useSetDefaultResourceServer', () => {
   const mockResponse: DefaultResourceServerConfigResponse = {
     readOnly: {},
-    writable: {resourceServerId: 'rs-2'},
-    merged: {resourceServerId: 'rs-2'},
+    writable: {resourceServerInterfaceId: 'rs-2'},
+    merged: {resourceServerInterfaceId: 'rs-2'},
   };
 
   beforeEach(() => {
@@ -52,11 +52,11 @@ describe('useSetDefaultResourceServer', () => {
     vi.clearAllMocks();
   });
 
-  it('PUTs the resource server id to /server-config/defaultResourceServer', async () => {
+  it('PUTs the interface ID to /server-config/defaultResourceServerInterface', async () => {
     mockHttpRequest.mockResolvedValue({data: mockResponse});
     const {result} = renderHook(() => useSetDefaultResourceServer());
 
-    result.current.mutate({resourceServerId: 'rs-2'});
+    result.current.mutate({resourceServerInterfaceId: 'rs-2'});
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
@@ -64,9 +64,9 @@ describe('useSetDefaultResourceServer', () => {
 
     expect(mockHttpRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        url: 'https://localhost:8090/server-config/defaultResourceServer',
+        url: 'https://localhost:8090/server-config/defaultResourceServerInterface',
         method: 'PUT',
-        data: {resourceServerId: 'rs-2'},
+        data: {resourceServerInterfaceId: 'rs-2'},
       }),
     );
   });
@@ -75,20 +75,20 @@ describe('useSetDefaultResourceServer', () => {
     mockHttpRequest.mockResolvedValue({data: mockResponse});
     const {result, queryClient} = renderHook(() => useSetDefaultResourceServer());
 
-    result.current.mutate({resourceServerId: 'rs-2'});
+    result.current.mutate({resourceServerInterfaceId: 'rs-2'});
 
     await waitFor(() => {
       expect(result.current.isSuccess).toBe(true);
     });
 
-    expect(queryClient.getQueryData(['server-config', 'defaultResourceServer'])).toEqual(mockResponse);
+    expect(queryClient.getQueryData(['server-config', 'defaultResourceServerInterface'])).toEqual(mockResponse);
   });
 
   it('surfaces update errors', async () => {
     mockHttpRequest.mockRejectedValue(new Error('nope'));
     const {result} = renderHook(() => useSetDefaultResourceServer());
 
-    result.current.mutate({resourceServerId: 'rs-2'});
+    result.current.mutate({resourceServerInterfaceId: 'rs-2'});
 
     await waitFor(() => {
       expect(result.current.error?.message).toBe('nope');

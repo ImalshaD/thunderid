@@ -109,10 +109,9 @@ func (e *resourceServerExporter) GetResourceByID(ctx context.Context, id string)
 		ID:          server.ID,
 		Name:        server.Name,
 		Description: server.Description,
-		Identifier:  server.Identifier,
-		Type:        server.Type,
 		OUID:        server.OUID,
 		Delimiter:   server.Delimiter,
+		Interfaces:  server.Interfaces,
 		Resources:   []providers.Resource{},
 	}
 
@@ -277,22 +276,16 @@ func parseToResourceServer(data []byte) (*providers.ResourceServer, error) {
 	if rs.Name == "" {
 		return nil, fmt.Errorf("resource server name cannot be empty")
 	}
-	if rs.Type != "" && !rs.Type.IsValid() {
-		return nil, fmt.Errorf("invalid type %q for resource server '%s'", rs.Type, rs.Name)
-	}
-	if rs.Type == "" {
-		rs.Type = providers.ResourceServerTypeCustom
+	if err := validateDeclarativeInterfaces(&rs); err != nil {
+		return nil, err
 	}
 
-	// Apply the action kind discriminator rules (mirrors the REST path). The kind is optional for all
-	// resource server types; MCP actions default to "tool" when omitted, and any provided kind must be
+	// Apply the action kind discriminator rules (mirrors the REST path). The kind is declared per
+	// action and independent of the interfaces the resource server exposes; any provided kind must be
 	// one of the supported values (tool|resource).
 	for i := range rs.Resources {
 		for j := range rs.Resources[i].Actions {
 			action := &rs.Resources[i].Actions[j]
-			if rs.Type == providers.ResourceServerTypeMCP && action.Kind == "" {
-				action.Kind = providers.ActionKindTool
-			}
 			if action.Kind != "" && !action.Kind.IsValid() {
 				return nil, fmt.Errorf(
 					"action %q in resource server '%s' has invalid kind %q (allowed: tool|resource)",
@@ -303,6 +296,48 @@ func parseToResourceServer(data []byte) (*providers.ResourceServer, error) {
 	}
 
 	return &rs, nil
+}
+
+// validateDeclarativeInterfaces validates the interfaces declared on a resource server and binds
+// each one to its owning resource server. Interface IDs must be stable so that declarative default
+// interface configuration can reference them.
+func validateDeclarativeInterfaces(rs *providers.ResourceServer) error {
+	if len(rs.Interfaces) == 0 {
+		return fmt.Errorf("resource server '%s' must declare at least one interface", rs.Name)
+	}
+
+	seenIDs := make(map[string]struct{}, len(rs.Interfaces))
+	seenIdentifiers := make(map[string]struct{}, len(rs.Interfaces))
+	for i := range rs.Interfaces {
+		rsi := &rs.Interfaces[i]
+		if rsi.ID == "" {
+			return fmt.Errorf("interface ID cannot be empty in resource server '%s'", rs.Name)
+		}
+		if !rsi.Type.IsValid() {
+			return fmt.Errorf(
+				"invalid type %q for interface '%s' in resource server '%s'", rsi.Type, rsi.ID, rs.Name,
+			)
+		}
+		// The same rule as the management API: a declarative interface must carry an identifier an
+		// explicit OAuth resource parameter could also use.
+		if err := ValidateInterfaceIdentifier(rsi.Identifier); err != nil {
+			return fmt.Errorf("interface '%s' in resource server '%s': %w", rsi.ID, rs.Name, err)
+		}
+		if _, ok := seenIDs[rsi.ID]; ok {
+			return fmt.Errorf("duplicate interface ID '%s' in resource server '%s'", rsi.ID, rs.Name)
+		}
+		seenIDs[rsi.ID] = struct{}{}
+		if _, ok := seenIdentifiers[rsi.Identifier]; ok {
+			return fmt.Errorf(
+				"duplicate interface identifier '%s' in resource server '%s'", rsi.Identifier, rs.Name,
+			)
+		}
+		seenIdentifiers[rsi.Identifier] = struct{}{}
+
+		rsi.ResourceServerID = rs.ID
+	}
+
+	return nil
 }
 
 // ProcessResourceServer processes the resource server and computes permissions in-place.
@@ -337,23 +372,20 @@ func ProcessResourceServer(rs *providers.ResourceServer) error {
 		}
 	}
 
-	// For MCP resource servers, a resource (group) and an action (tool/resource) in the same parent
-	// context can derive an identical permission string under exact-string RBAC, silently collapsing
-	// two distinct primitives. Mirror the REST cross-entity check (Rule 6) on the declarative path by
-	// failing on the first duplicate derived permission across all resources and their nested actions.
-	if rs.Type == providers.ResourceServerTypeMCP {
-		if err := checkDuplicateMCPPermissions(rs); err != nil {
-			return err
-		}
+	// A resource and an action in the same parent context can derive an identical permission string
+	// under exact-string RBAC, silently collapsing two distinct primitives. Permissions belong to the
+	// resource server rather than to any interface, so the check applies to every resource server.
+	if err := checkDuplicatePermissions(rs); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-// checkDuplicateMCPPermissions detects duplicate derived permission strings across all resources
-// (groups) and their nested actions (tools/resources) for an MCP resource server. It returns an
-// error naming the colliding permission and handles on the first duplicate found.
-func checkDuplicateMCPPermissions(rs *providers.ResourceServer) error {
+// checkDuplicatePermissions detects duplicate derived permission strings across all resources and
+// their nested actions. It returns an error naming the colliding permission and handles on the first
+// duplicate found.
+func checkDuplicatePermissions(rs *providers.ResourceServer) error {
 	seen := make(map[string]string)
 	for i := range rs.Resources {
 		res := &rs.Resources[i]
@@ -462,8 +494,8 @@ func validateResourceServerWrapper(
 		return fmt.Errorf("resource server name cannot be empty")
 	}
 
-	if rs.Identifier == "" {
-		return fmt.Errorf("resource server identifier cannot be empty")
+	if err := validateDeclarativeInterfaces(rs); err != nil {
+		return err
 	}
 
 	if service != nil {
@@ -498,6 +530,48 @@ func validateResourceServerWrapper(
 		// Propagate any error other than not-found
 		if !errors.Is(err, errResourceServerNotFound) {
 			return fmt.Errorf("failed to check for duplicate resource server in database store: %w", err)
+		}
+	}
+
+	return validateInterfacesAreUnclaimed(rs, fileStore, dbStore)
+}
+
+// validateInterfacesAreUnclaimed rejects a declarative resource server whose interfaces collide with
+// interfaces already held in either store. Identifiers are audiences and must be unique per
+// deployment, and identifier resolution returns the first match, so a collision across two
+// declarative resource servers would make authorization depend on store ordering.
+func validateInterfacesAreUnclaimed(
+	rs *providers.ResourceServer,
+	fileStore resourceStoreInterface,
+	dbStore resourceStoreInterface,
+) error {
+	stores := map[string]resourceStoreInterface{"declarative resources": fileStore}
+	if dbStore != nil {
+		stores["the database store"] = dbStore
+	}
+
+	for _, rsi := range rs.Interfaces {
+		for label, store := range stores {
+			existing, err := store.GetResourceServerInterface(context.Background(), rsi.ID)
+			if err == nil {
+				if existing.ResourceServerID != rs.ID {
+					return fmt.Errorf("duplicate interface ID '%s' in resource server '%s': "+
+						"an interface with this ID already exists in %s", rsi.ID, rs.Name, label)
+				}
+			} else if !errors.Is(err, errResourceServerInterfaceNotFound) {
+				return fmt.Errorf("failed to check for duplicate interface in %s: %w", label, err)
+			}
+
+			claimed, err := store.GetResourceServerInterfaceByIdentifier(context.Background(), rsi.Identifier)
+			if err == nil {
+				if claimed.ResourceServerID != rs.ID {
+					return fmt.Errorf("duplicate interface identifier '%s' in resource server '%s': "+
+						"resource server '%s' in %s already exposes it",
+						rsi.Identifier, rs.Name, claimed.ResourceServerID, label)
+				}
+			} else if !errors.Is(err, errResourceServerInterfaceNotFound) {
+				return fmt.Errorf("failed to check for duplicate interface identifier in %s: %w", label, err)
+			}
 		}
 	}
 

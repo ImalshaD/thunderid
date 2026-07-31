@@ -2877,8 +2877,34 @@ func TestGetAgentOAuthConfigForImport_NilRequest(t *testing.T) {
 
 // fakeResourceServerService is a test double for the resource server adapter used by importer tests.
 type fakeResourceServerService struct {
-	created []providers.ResourceServer
-	updated []providers.ResourceServer
+	created           []providers.ResourceServer
+	updated           []providers.ResourceServer
+	createdInterfaces []providers.ResourceServerInterface
+	updatedInterfaces []providers.ResourceServerInterface
+	existingInterface []providers.ResourceServerInterface
+}
+
+func (f *fakeResourceServerService) CreateResourceServerInterface(
+	_ context.Context, resourceServerID string, rsi providers.ResourceServerInterface,
+) (*providers.ResourceServerInterface, *tidcommon.ServiceError) {
+	rsi.ResourceServerID = resourceServerID
+	f.createdInterfaces = append(f.createdInterfaces, rsi)
+	return &rsi, nil
+}
+
+func (f *fakeResourceServerService) UpdateResourceServerInterface(
+	_ context.Context, resourceServerID, interfaceID string, rsi providers.ResourceServerInterface,
+) (*providers.ResourceServerInterface, *tidcommon.ServiceError) {
+	rsi.ID = interfaceID
+	rsi.ResourceServerID = resourceServerID
+	f.updatedInterfaces = append(f.updatedInterfaces, rsi)
+	return &rsi, nil
+}
+
+func (f *fakeResourceServerService) GetResourceServerInterfaceList(
+	_ context.Context, _ string,
+) ([]providers.ResourceServerInterface, *tidcommon.ServiceError) {
+	return f.existingInterface, nil
 }
 
 func (f *fakeResourceServerService) CreateResourceServer(
@@ -3364,4 +3390,141 @@ func TestImportResources_IDPUpsertUpdatePropertiesArePassedToService(t *testing.
 	plainValue, err2 := updated.Properties[0].GetValue()
 	require.NoError(t, err2)
 	assert.Equal(t, "updated-client-id", plainValue)
+}
+
+// TestImportResourceServer_CreatesAdditionalInterfaces verifies that a resource server declaring
+// several interfaces gets all of them: creation persists the initial one, and the import creates the
+// rest with the IDs declared in the document so the default-interface configuration can reference them.
+func TestImportResourceServer_CreatesAdditionalInterfaces(t *testing.T) {
+	ouSvc := &fakeOUService{existing: map[string]providers.OrganizationUnit{
+		"ou-default": {ID: "ou-default", Handle: "default"},
+	}}
+	rsSvc := &fakeResourceServerService{
+		existingInterface: []providers.ResourceServerInterface{{
+			ID:         "rsi-api",
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: "https://localhost:8090",
+		}},
+	}
+	svc := newImportService(
+		nil, nil, nil, nil, ouSvc, nil, nil, nil, nil, rsSvc, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+
+	content := strings.Join([]string{
+		"resource_type: resource_server",
+		"id: rs-system",
+		"name: System",
+		"ouHandle: default",
+		"interfaces:",
+		"  - id: rsi-api",
+		"    type: API",
+		"    identifier: https://localhost:8090",
+		"  - id: rsi-mcp",
+		"    type: MCP",
+		"    identifier: https://localhost:8090/mcp",
+		"resources: []",
+		"",
+	}, "\n")
+
+	resp, err := svc.ImportResources(context.Background(), &ImportRequest{
+		Content: content,
+		Options: &ImportOptions{Upsert: boolPtr(false)},
+	})
+
+	require.Nil(t, err)
+	require.Len(t, resp.Results, 1)
+	assert.Equal(t, statusSuccess, resp.Results[0].Status)
+
+	// The API interface already exists from resource-server creation, so only the MCP one is added.
+	require.Len(t, rsSvc.createdInterfaces, 1)
+	assert.Equal(t, "rsi-mcp", rsSvc.createdInterfaces[0].ID)
+	assert.Equal(t, providers.ResourceServerInterfaceTypeMCP, rsSvc.createdInterfaces[0].Type)
+	assert.Equal(t, "https://localhost:8090/mcp", rsSvc.createdInterfaces[0].Identifier)
+	assert.Equal(t, "rs-system", rsSvc.createdInterfaces[0].ResourceServerID)
+}
+
+// TestImportResourceServer_UpdatesInterfaceByDeclaredID verifies upsert reconciliation: an interface
+// whose identifier or type changed in the document is updated in place, matched on its stable ID,
+// rather than a second interface being created alongside it.
+func TestImportResourceServer_UpdatesInterfaceByDeclaredID(t *testing.T) {
+	ouSvc := &fakeOUService{existing: map[string]providers.OrganizationUnit{
+		"ou-default": {ID: "ou-default", Handle: "default"},
+	}}
+	rsSvc := &fakeResourceServerService{
+		existingInterface: []providers.ResourceServerInterface{{
+			ID:         "rsi-api",
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: "https://localhost:8090",
+		}},
+	}
+	svc := newImportService(
+		nil, nil, nil, nil, ouSvc, nil, nil, nil, nil, rsSvc, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+
+	content := strings.Join([]string{
+		"resource_type: resource_server",
+		"id: rs-system",
+		"name: System",
+		"ouHandle: default",
+		"interfaces:",
+		"  - id: rsi-api",
+		"    type: MCP",
+		"    identifier: https://localhost:8090/v2",
+		"resources: []",
+		"",
+	}, "\n")
+
+	resp, err := svc.ImportResources(context.Background(), &ImportRequest{
+		Content: content,
+		Options: &ImportOptions{Upsert: boolPtr(true)},
+	})
+
+	require.Nil(t, err)
+	require.Len(t, resp.Results, 1)
+	assert.Equal(t, statusSuccess, resp.Results[0].Status)
+
+	assert.Empty(t, rsSvc.createdInterfaces, "an existing interface ID must not create a second interface")
+	require.Len(t, rsSvc.updatedInterfaces, 1)
+	assert.Equal(t, "rsi-api", rsSvc.updatedInterfaces[0].ID)
+	assert.Equal(t, providers.ResourceServerInterfaceTypeMCP, rsSvc.updatedInterfaces[0].Type)
+	assert.Equal(t, "https://localhost:8090/v2", rsSvc.updatedInterfaces[0].Identifier)
+}
+
+// An unchanged interface is neither created nor updated, so re-importing the same bundle is a no-op.
+func TestImportResourceServer_UnchangedInterfaceIsNotTouched(t *testing.T) {
+	ouSvc := &fakeOUService{existing: map[string]providers.OrganizationUnit{
+		"ou-default": {ID: "ou-default", Handle: "default"},
+	}}
+	rsSvc := &fakeResourceServerService{
+		existingInterface: []providers.ResourceServerInterface{{
+			ID:         "rsi-api",
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: "https://localhost:8090",
+		}},
+	}
+	svc := newImportService(
+		nil, nil, nil, nil, ouSvc, nil, nil, nil, nil, rsSvc, nil, nil, nil, nil, nil, nil, nil, nil,
+	)
+
+	content := strings.Join([]string{
+		"resource_type: resource_server",
+		"id: rs-system",
+		"name: System",
+		"ouHandle: default",
+		"interfaces:",
+		"  - id: rsi-api",
+		"    type: API",
+		"    identifier: https://localhost:8090",
+		"resources: []",
+		"",
+	}, "\n")
+
+	_, err := svc.ImportResources(context.Background(), &ImportRequest{
+		Content: content,
+		Options: &ImportOptions{Upsert: boolPtr(true)},
+	})
+
+	require.Nil(t, err)
+	assert.Empty(t, rsSvc.createdInterfaces)
+	assert.Empty(t, rsSvc.updatedInterfaces)
 }

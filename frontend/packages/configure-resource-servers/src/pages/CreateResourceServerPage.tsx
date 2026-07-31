@@ -42,7 +42,11 @@ import ConfigureType from '../components/create-resource-server/ConfigureType';
 import {DEFAULT_PERMISSION_DELIMITER} from '../constants/permission-constants';
 import useResourceServerRoutes from '../hooks/useResourceServerRoutes';
 import type {PermissionDelimiter} from '../models/permissions';
-import type {ResourceServerType} from '../models/resource-server';
+import type {
+  CreateResourceServerRequest,
+  ResourceServerInterfaceRequest,
+  ResourceServerType,
+} from '../models/resource-server';
 
 const ResourceServerCreateStep = {
   TYPE: 'TYPE',
@@ -154,12 +158,18 @@ export default function CreateResourceServerPage(): JSX.Element {
     const resolvedOuId = effectiveOuId;
     if (!resolvedOuId) return;
 
-    const payload = {
+    // API and MCP carry their audience from the wizard as the initial interface. Custom is created
+    // without one: it defines permissions, and interfaces are added later from the Interfaces tab.
+    const initialInterface: ResourceServerInterfaceRequest | undefined =
+      selectedType === 'API' || selectedType === 'MCP'
+        ? {type: selectedType, identifier: identifier.trim()}
+        : undefined;
+
+    const payload: CreateResourceServerRequest = {
       name: name.trim(),
-      identifier: identifier.trim(),
       ouId: resolvedOuId,
-      type: selectedType,
       delimiter,
+      ...(initialInterface ? {interface: initialInterface} : {}),
     };
 
     createResourceServer.mutate(payload, {

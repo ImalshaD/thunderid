@@ -86,7 +86,7 @@ func (suite *ResourceIndicatorsTestSuite) TestResolveResourceServers_Empty() {
 }
 
 func (suite *ResourceIndicatorsTestSuite) TestResolveResourceServers_Found() {
-	rs := providers.ResourceServer{ID: "rs01", Identifier: "https://api.example.com"}
+	rs := *resolvedResourceServer("rs01", "https://api.example.com")
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, "https://api.example.com").
 		Return(&rs, nil)
 
@@ -127,7 +127,7 @@ func (suite *ResourceIndicatorsTestSuite) TestResolveResourceServers_StoreFailur
 // ResolveTargetResourceServer tests
 
 func (suite *ResourceIndicatorsTestSuite) TestResolveTargetResourceServer_SingleResource_Resolves() {
-	rs := providers.ResourceServer{ID: "rs01", Identifier: "https://api.example.com"}
+	rs := *resolvedResourceServer("rs01", "https://api.example.com")
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, "https://api.example.com").
 		Return(&rs, nil)
 
@@ -176,7 +176,7 @@ func (suite *ResourceIndicatorsTestSuite) TestResolveTargetResourceServer_Lookup
 // When no resource is supplied, the resolver asks the provider to resolve the empty identifier; a
 // default-aware provider turns this into the deployment's configured default resource server.
 func (suite *ResourceIndicatorsTestSuite) TestResolveTargetResourceServer_NoResource_ProviderResolvesDefault() {
-	rs := providers.ResourceServer{ID: "rs-1", Identifier: "https://api.example.com"}
+	rs := *resolvedResourceServer("rs-1", "https://api.example.com")
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, "").
 		Return(&rs, nil)
 
@@ -276,7 +276,7 @@ func (suite *ResourceIndicatorsTestSuite) TestComputeRSValidScopes_Empty() {
 }
 
 func (suite *ResourceIndicatorsTestSuite) TestComputeRSValidScopes_DropsInvalidPerRS() {
-	rs := &providers.ResourceServer{ID: "rs01", Identifier: "https://rs01.example.com"}
+	rs := resolvedResourceServer("rs01", "https://rs01.example.com")
 	suite.mockResourceService.On("ValidatePermissions", mock.Anything, "rs01", []string{"read", "write"}).
 		Return([]string{"write"}, nil)
 
@@ -288,7 +288,7 @@ func (suite *ResourceIndicatorsTestSuite) TestComputeRSValidScopes_DropsInvalidP
 }
 
 func (suite *ResourceIndicatorsTestSuite) TestComputeRSValidScopes_ValidatePermissionsError_ReturnsServerError() {
-	rs := &providers.ResourceServer{ID: "rs01", Identifier: "https://rs01.example.com"}
+	rs := resolvedResourceServer("rs01", "https://rs01.example.com")
 	svcErr := &tidcommon.ServiceError{Type: tidcommon.ServerErrorType, Code: "RSE-5000"}
 	suite.mockResourceService.On("ValidatePermissions", mock.Anything, "rs01", []string{"read"}).
 		Return(nil, svcErr)
@@ -313,7 +313,7 @@ func (suite *ResourceIndicatorsTestSuite) TestResolveAndDownscope_NoResources_Un
 }
 
 func (suite *ResourceIndicatorsTestSuite) TestResolveAndDownscope_Downscopes() {
-	rs := providers.ResourceServer{ID: "rs01", Identifier: "https://rs01.example.com"}
+	rs := *resolvedResourceServer("rs01", "https://rs01.example.com")
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, "https://rs01.example.com").
 		Return(&rs, nil)
 	suite.mockResourceService.On("ValidatePermissions", mock.Anything, "rs01", []string{"read", "write"}).
@@ -361,7 +361,7 @@ func (suite *ResourceIndicatorsTestSuite) TestResolveAudienceBinding_NoResourceN
 
 func (suite *ResourceIndicatorsTestSuite) TestResolveAudienceBinding_PermissionScopes_ResolvesDefault() {
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, "").
-		Return(&providers.ResourceServer{ID: "rs-1", Identifier: "https://api.example.com"}, nil)
+		Return(resolvedResourceServer("rs-1", "https://api.example.com"), nil)
 
 	rs, err := ResolveAudienceBinding(context.Background(), suite.mockResourceService,
 		nil, []string{"read"})
@@ -372,7 +372,7 @@ func (suite *ResourceIndicatorsTestSuite) TestResolveAudienceBinding_PermissionS
 }
 
 func (suite *ResourceIndicatorsTestSuite) TestResolveAudienceBinding_ExplicitResourceNoPermissionScopes_Resolves() {
-	rs := providers.ResourceServer{ID: "rs01", Identifier: "https://api.example.com"}
+	rs := *resolvedResourceServer("rs01", "https://api.example.com")
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, "https://api.example.com").
 		Return(&rs, nil)
 
@@ -381,4 +381,110 @@ func (suite *ResourceIndicatorsTestSuite) TestResolveAudienceBinding_ExplicitRes
 
 	assert.Nil(suite.T(), err)
 	assert.Equal(suite.T(), &rs, resolved)
+}
+
+// SelectedAudience tests
+
+// Identifier resolution narrows a resource server to the interface that selected it, and that
+// interface identifier is the audience the access token must carry.
+func (suite *ResourceIndicatorsTestSuite) TestSelectedAudience_ReturnsResolvedInterfaceIdentifier() {
+	rs := &providers.ResourceServer{
+		ID: "rs-system",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:         "rsi-mcp",
+			Type:       providers.ResourceServerInterfaceTypeMCP,
+			Identifier: "https://localhost:8090/mcp",
+		}},
+	}
+
+	assert.Equal(suite.T(), "https://localhost:8090/mcp", SelectedAudience(rs))
+}
+
+func (suite *ResourceIndicatorsTestSuite) TestSelectedAudience_NilResourceServer() {
+	assert.Equal(suite.T(), "", SelectedAudience(nil))
+}
+
+// A resource server that was never resolved through an interface carries no audience, so the caller
+// falls back to the application's configured audiences rather than inventing one.
+func (suite *ResourceIndicatorsTestSuite) TestSelectedAudience_NoInterfaces() {
+	assert.Equal(suite.T(), "", SelectedAudience(&providers.ResourceServer{ID: "rs-system"}))
+}
+
+// An un-narrowed resource server is ambiguous: picking either interface could hand an API client an
+// MCP audience, so no audience is reported.
+func (suite *ResourceIndicatorsTestSuite) TestSelectedAudience_AmbiguousWhenNotNarrowed() {
+	rs := &providers.ResourceServer{
+		ID: "rs-system",
+		Interfaces: []providers.ResourceServerInterface{
+			{ID: "rsi-api", Type: providers.ResourceServerInterfaceTypeAPI, Identifier: "https://api.example.com"},
+			{ID: "rsi-mcp", Type: providers.ResourceServerInterfaceTypeMCP, Identifier: "https://localhost:8090/mcp"},
+		},
+	}
+
+	assert.Equal(suite.T(), "", SelectedAudience(rs))
+}
+
+// Explicit API and MCP resource indicators on one resource server must produce distinct audiences
+// while resolving to the same resource server for permission validation.
+func (suite *ResourceIndicatorsTestSuite) TestResolveAudienceBinding_DistinctAudiencesPerInterface() {
+	const (
+		apiIdentifier = "https://api.example.com/system"
+		mcpIdentifier = "https://localhost:8090/mcp"
+	)
+	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, apiIdentifier).
+		Return(&providers.ResourceServer{
+			ID: "rs-system",
+			Interfaces: []providers.ResourceServerInterface{{
+				ID: "rsi-api", Type: providers.ResourceServerInterfaceTypeAPI, Identifier: apiIdentifier,
+			}},
+		}, nil)
+	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, mcpIdentifier).
+		Return(&providers.ResourceServer{
+			ID: "rs-system",
+			Interfaces: []providers.ResourceServerInterface{{
+				ID: "rsi-mcp", Type: providers.ResourceServerInterfaceTypeMCP, Identifier: mcpIdentifier,
+			}},
+		}, nil)
+
+	apiTarget, errResp := ResolveAudienceBinding(
+		context.Background(), suite.mockResourceService, []string{apiIdentifier}, []string{"system"})
+	assert.Nil(suite.T(), errResp)
+	suite.Require().NotNil(apiTarget)
+
+	mcpTarget, errResp := ResolveAudienceBinding(
+		context.Background(), suite.mockResourceService, []string{mcpIdentifier}, []string{"system"})
+	assert.Nil(suite.T(), errResp)
+	suite.Require().NotNil(mcpTarget)
+
+	assert.Equal(suite.T(), apiIdentifier, SelectedAudience(apiTarget))
+	assert.Equal(suite.T(), mcpIdentifier, SelectedAudience(mcpTarget))
+	assert.NotEqual(suite.T(), SelectedAudience(apiTarget), SelectedAudience(mcpTarget))
+	assert.Equal(suite.T(), apiTarget.ID, mcpTarget.ID)
+}
+
+// An explicit resource must never silently fall back to the deployment default.
+func (suite *ResourceIndicatorsTestSuite) TestResolveAudienceBinding_ExplicitResourceDoesNotFallBackToDefault() {
+	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, "https://unknown.example.com").
+		Return(nil, &tidcommon.ServiceError{Type: tidcommon.ClientErrorType, Code: "RES-1024"})
+
+	target, errResp := ResolveAudienceBinding(
+		context.Background(), suite.mockResourceService,
+		[]string{"https://unknown.example.com"}, []string{"system"})
+
+	assert.Nil(suite.T(), target)
+	suite.Require().NotNil(errResp)
+	assert.Equal(suite.T(), constants.ErrorInvalidTarget, errResp.Error)
+	suite.mockResourceService.AssertNotCalled(suite.T(), "GetResourceServerByIdentifier", mock.Anything, "")
+}
+
+// resolvedResourceServer mirrors what identifier resolution returns: the resource server carrying
+// exactly the interface that selected it, which is the interface the token audience comes from.
+func resolvedResourceServer(id, identifier string) *providers.ResourceServer {
+	return &providers.ResourceServer{
+		ID: id,
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: identifier,
+		}},
+	}
 }

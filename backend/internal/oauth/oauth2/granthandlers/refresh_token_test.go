@@ -108,7 +108,7 @@ func (suite *RefreshTokenGrantHandlerTestSuite) SetupTest() {
 
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, mock.Anything).
 		Return(func(_ context.Context, identifier string) *providers.ResourceServer {
-			return &providers.ResourceServer{ID: identifier, Identifier: identifier}
+			return resolvedResourceServer(identifier, identifier)
 		}, func(_ context.Context, _ string) *tidcommon.ServiceError {
 			return nil
 		}).Maybe()
@@ -1705,7 +1705,7 @@ func (suite *RefreshTokenGrantHandlerTestSuite) TestHandleGrant_ScopeDownscopedT
 	// as invalid for rs01, so the non-OIDC scope is downscoped and the access token carries only "read".
 	suite.mockResourceService.ExpectedCalls = nil
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, testRS01URI).
-		Return(&providers.ResourceServer{ID: "rs-1", Identifier: testRS01URI}, nil)
+		Return(resolvedResourceServer("rs-1", testRS01URI), nil)
 	suite.mockResourceService.On("ValidatePermissions", mock.Anything, "rs-1", mock.Anything).
 		Return([]string{"write"}, nil)
 
@@ -2039,7 +2039,7 @@ func (suite *RefreshTokenGrantHandlerTestSuite) TestHandleGrant_DownscopeValidat
 
 	rsvc := resourcemock.NewResourceServiceInterfaceMock(suite.T())
 	rsvc.On("GetResourceServerByIdentifier", mock.Anything, testRefreshTokenAudience).
-		Return(&providers.ResourceServer{ID: testRefreshTokenAudience, Identifier: testRefreshTokenAudience}, nil)
+		Return(resolvedResourceServer(testRefreshTokenAudience, testRefreshTokenAudience), nil)
 	rsvc.On("ValidatePermissions", mock.Anything, mock.Anything, mock.Anything).
 		Return([]string(nil), &tidcommon.ServiceError{Type: tidcommon.ServerErrorType, Code: "RES-5001"})
 	suite.mockResourceService = rsvc

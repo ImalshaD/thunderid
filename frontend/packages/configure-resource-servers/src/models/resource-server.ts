@@ -18,17 +18,29 @@
 
 import type {PermissionDelimiter} from './permissions';
 
+// Console-only classification of a resource server. It is not persisted: the backend stores
+// interfaces, and the type is derived from them by deriveResourceServerType.
 export type ResourceServerType = 'API' | 'MCP' | 'CUSTOM';
+
+// A resource server interface is a way of reaching a resource server. Its identifier is the audience
+// of access tokens issued for it, and is unique across the deployment.
+export type ResourceServerInterfaceType = 'API' | 'MCP';
+
+export interface ResourceServerInterface {
+  id: string;
+  type: ResourceServerInterfaceType;
+  identifier: string;
+  isReadOnly?: boolean;
+}
 
 export interface ResourceServer {
   id: string;
   name: string;
   description?: string | null;
-  identifier: string;
   ouId: string;
   delimiter: string;
   isReadOnly?: boolean;
-  type: ResourceServerType;
+  interfaces: ResourceServerInterface[];
 }
 
 export interface ResourceServerListResponse {
@@ -75,19 +87,28 @@ export interface ActionListResponse {
   links?: {rel: string; href: string}[];
 }
 
+export interface ResourceServerInterfaceRequest {
+  type: ResourceServerInterfaceType;
+  identifier: string;
+}
+
 export interface CreateResourceServerRequest {
   name: string;
   description?: string;
-  identifier: string;
   delimiter?: PermissionDelimiter;
   ouId: string;
-  type?: ResourceServerType;
+  // Omitted for a Custom resource server, which starts with no audience.
+  interface?: ResourceServerInterfaceRequest;
+}
+
+export interface ResourceServerInterfaceListResponse {
+  totalResults: number;
+  interfaces: ResourceServerInterface[];
 }
 
 export interface UpdateResourceServerRequest {
   name: string;
   description?: string | null;
-  identifier: string;
   ouId: string;
 }
 
@@ -121,7 +142,7 @@ export interface ResourcePermissions {
 }
 
 export interface DefaultResourceServerValue {
-  resourceServerId?: string;
+  resourceServerInterfaceId?: string;
 }
 
 export interface ServerConfigLayers<T> {

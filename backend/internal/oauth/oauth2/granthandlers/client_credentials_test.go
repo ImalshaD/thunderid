@@ -94,9 +94,9 @@ func (suite *ClientCredentialsGrantHandlerTestSuite) SetupTest() {
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, mock.Anything).
 		Return(func(_ context.Context, identifier string) *providers.ResourceServer {
 			if identifier == "" {
-				return &providers.ResourceServer{ID: defaultRSID, Identifier: defaultRSIdentifier}
+				return resolvedResourceServer(defaultRSID, defaultRSIdentifier)
 			}
-			return &providers.ResourceServer{ID: identifier, Identifier: identifier}
+			return resolvedResourceServer(identifier, identifier)
 		}, func(_ context.Context, _ string) *tidcommon.ServiceError {
 			return nil
 		}).Maybe()
@@ -991,4 +991,76 @@ func (suite *ClientCredentialsGrantHandlerTestSuite) TestHandleGrant_NoDPoPProof
 	assert.Nil(suite.T(), errResp)
 	assert.NotNil(suite.T(), result)
 	assert.Equal(suite.T(), constants.TokenTypeBearer, result.AccessToken.TokenType)
+}
+
+// TestHandleGrant_SameResourceServerDistinctInterfaceAudiences verifies the core of the interface
+// model end to end: one resource server exposing an API and an MCP interface issues tokens whose
+// audience follows the requested resource indicator, while both requests authorize against that one
+// resource server's permissions.
+func (suite *ClientCredentialsGrantHandlerTestSuite) TestHandleGrant_SameResourceServerDistinctInterfaceAudiences() {
+	const (
+		systemRSID    = "rs-system"
+		apiIdentifier = "https://api.example.com/system"
+		mcpIdentifier = "https://localhost:8090/mcp"
+	)
+
+	for _, tc := range []struct {
+		name     string
+		resource string
+	}{
+		{name: "APIInterface", resource: apiIdentifier},
+		{name: "MCPInterface", resource: mcpIdentifier},
+	} {
+		suite.Run(tc.name, func() {
+			// A dedicated resource mock: both identifiers resolve to the same resource server, each
+			// narrowed to the interface that was requested.
+			resourceService := resourcemock.NewResourceServiceInterfaceMock(suite.T())
+			resourceService.On("GetResourceServerByIdentifier", mock.Anything, tc.resource).
+				Return(resolvedResourceServer(systemRSID, tc.resource), nil)
+			resourceService.On("ValidatePermissions", mock.Anything, systemRSID, mock.Anything).
+				Return([]string{}, nil)
+			handler := &clientCredentialsGrantHandler{
+				tokenBuilder:    suite.mockTokenBuilder,
+				ouService:       suite.mockOUService,
+				authzService:    suite.mockAuthzService,
+				actorProvider:   suite.mockEntityProvider,
+				resourceService: resourceService,
+			}
+
+			tokenRequest := &model.TokenRequest{
+				GrantType:    "client_credentials",
+				ClientID:     testClientID,
+				ClientSecret: "secret123",
+				Scope:        "r1:s1",
+				Resources:    []string{tc.resource},
+			}
+
+			// Authorization is always evaluated against the owning resource server, never the interface.
+			mockEvaluateAccessBatch(suite.mockAuthzService, suite.oauthApp.ID, systemRSID,
+				[]string{"r1:s1"}, []string{"r1:s1"})
+
+			var capturedAudiences []string
+			suite.mockTokenBuilder.On("BuildAccessToken", mock.Anything,
+				mock.MatchedBy(func(ctx *tokenservice.AccessTokenBuildContext) bool {
+					capturedAudiences = ctx.Audiences
+					return true
+				})).Return(&model.TokenDTO{
+				Token:     testJWTToken,
+				TokenType: constants.TokenTypeBearer,
+				IssuedAt:  int64(1234567890),
+				ExpiresIn: 3600,
+				Scopes:    []string{"r1:s1"},
+				ClientID:  testClientID,
+				Subject:   testEntityID,
+				Audiences: []string{tc.resource},
+			}, nil).Once()
+
+			result, errResp := handler.HandleGrant(context.Background(), tokenRequest, suite.oauthApp)
+
+			assert.Nil(suite.T(), errResp)
+			assert.NotNil(suite.T(), result)
+			assert.Equal(suite.T(), []string{tc.resource}, capturedAudiences)
+			resourceService.AssertExpectations(suite.T())
+		})
+	}
 }

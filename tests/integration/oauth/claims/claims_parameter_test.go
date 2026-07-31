@@ -114,7 +114,7 @@ func (ts *ClaimsParameterTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "Claims Test Resource Server",
 		Description: "Resource server for claims parameter integration tests",
-		Identifier:  claimsTestResource,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: claimsTestResource},
 		OUID:        ts.ouID,
 	}, []testutils.Action{})
 	ts.Require().NoError(err, "Failed to create claims test resource server")

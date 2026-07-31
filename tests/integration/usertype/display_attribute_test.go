@@ -67,7 +67,7 @@ func (ts *DisplayAttributeTestSuite) SetupSuite() {
 	rs := testutils.ResourceServer{
 		Name:        "Display Attr Test RS",
 		Description: "Resource server for display attribute testing",
-		Identifier:  "display-attr-test-rs",
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: "display-attr-test-rs"},
 		OUID:        ts.oUID,
 	}
 	action := testutils.Action{

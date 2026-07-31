@@ -40,12 +40,13 @@ import (
 )
 
 const (
-	testOriginalName    = "original-name"
-	testOriginalHandle  = "original-handle"
-	testUpdatedName     = "updated-name"
-	testNewDescription  = "new description"
-	testWrongResourceID = "res-wrong"
-	declarativeRSID     = "declarative-rs"
+	testOriginalName     = "original-name"
+	testOriginalHandle   = "original-handle"
+	testUpdatedName      = "updated-name"
+	testNewDescription   = "new description"
+	testWrongResourceID  = "res-wrong"
+	declarativeRSID      = "declarative-rs"
+	testResourceServerID = "rs-123"
 )
 
 var testParentResourceID = "parent-123"
@@ -57,7 +58,7 @@ func matchResourceServer(expected providers.ResourceServer) interface{} {
 	return mock.MatchedBy(func(actual providers.ResourceServer) bool {
 		return actual.Name == expected.Name &&
 			actual.Description == expected.Description &&
-			actual.Identifier == expected.Identifier &&
+			len(actual.Interfaces) == len(expected.Interfaces) &&
 			actual.OUID == expected.OUID &&
 			actual.Delimiter != "" // Delimiter should be set
 	})
@@ -177,12 +178,20 @@ func (suite *ResourceServiceTestSuite) TestNewResourceService_InvalidDelimiter()
 
 // Resource Server Tests
 
+// testAPIInterface returns a valid initial API interface for resource server creation tests.
+func testAPIInterface() providers.ResourceServerInterface {
+	return providers.ResourceServerInterface{
+		Type:       providers.ResourceServerInterfaceTypeAPI,
+		Identifier: "https://api.example.com/orders",
+	}
+}
+
 func (suite *ResourceServiceTestSuite) TestCreateResourceServer_Success() {
 	rs := providers.ResourceServer{
 		Name:        "test-rs",
 		Description: "Test resource server",
-		Identifier:  "test-identifier",
 		OUID:        "ou-123",
+		Interfaces:  []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
@@ -190,12 +199,18 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_Success() {
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything,
 		"test-rs").
 		Return(false, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything,
-		"test-identifier").
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://api.example.com/orders").
 		Return(false, nil)
 	suite.mockStore.On("CreateResourceServer", mock.Anything,
 		mock.AnythingOfType("string"), matchResourceServer(rs)).
 		Return(nil)
+	suite.mockStore.On("CreateResourceServerInterface", mock.Anything,
+		mock.MatchedBy(func(rsi providers.ResourceServerInterface) bool {
+			return rsi.ID != "" && rsi.ResourceServerID != "" &&
+				rsi.Type == providers.ResourceServerInterfaceTypeAPI &&
+				rsi.Identifier == "https://api.example.com/orders"
+		})).Return(nil)
 
 	result, err := suite.service.CreateResourceServer(context.Background(), rs)
 
@@ -204,72 +219,147 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_Success() {
 	suite.NotEmpty(result.ID)
 	suite.Equal("test-rs", result.Name)
 	suite.Equal("Test resource server", result.Description)
+	suite.Require().Len(result.Interfaces, 1)
+	suite.NotEmpty(result.Interfaces[0].ID)
+	suite.Equal("https://api.example.com/orders", result.Interfaces[0].Identifier)
 	suite.mockStore.AssertExpectations(suite.T())
 	suite.mockOU.AssertExpectations(suite.T())
 }
 
-func (suite *ResourceServiceTestSuite) TestCreateResourceServer_WithType() {
+func (suite *ResourceServiceTestSuite) TestCreateResourceServer_WithMCPInterface() {
 	rs := providers.ResourceServer{
-		Name:       "test-rs",
-		Identifier: "test-identifier",
-		Type:       providers.ResourceServerTypeMCP,
-		OUID:       "ou-123",
+		Name: "test-rs",
+		OUID: "ou-123",
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeMCP,
+			Identifier: "https://localhost:8090/mcp",
+		}},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
 		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything, "test-rs").Return(false, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything, "test-identifier").Return(false, nil)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://localhost:8090/mcp").Return(false, nil)
 	suite.mockStore.On("CreateResourceServer", mock.Anything,
-		mock.AnythingOfType("string"), mock.MatchedBy(func(r providers.ResourceServer) bool {
-			return r.Type == providers.ResourceServerTypeMCP
+		mock.AnythingOfType("string"), mock.Anything).Return(nil)
+	suite.mockStore.On("CreateResourceServerInterface", mock.Anything,
+		mock.MatchedBy(func(rsi providers.ResourceServerInterface) bool {
+			return rsi.Type == providers.ResourceServerInterfaceTypeMCP
 		})).Return(nil)
 
 	result, err := suite.service.CreateResourceServer(context.Background(), rs)
 
 	suite.Nil(err)
 	suite.NotNil(result)
-	suite.Equal(providers.ResourceServerTypeMCP, result.Type)
+	suite.Require().Len(result.Interfaces, 1)
+	suite.Equal(providers.ResourceServerInterfaceTypeMCP, result.Interfaces[0].Type)
 	suite.mockStore.AssertExpectations(suite.T())
 }
 
-func (suite *ResourceServiceTestSuite) TestCreateResourceServer_DefaultsToCustom() {
+// A resource server may be created without an interface. It then defines permissions but has no
+// audience until an interface is added, which is how the Console creates a Custom resource server.
+func (suite *ResourceServiceTestSuite) TestCreateResourceServer_WithoutInterface() {
 	rs := providers.ResourceServer{
-		Name:       "test-rs",
-		Identifier: "test-identifier",
-		OUID:       "ou-123",
+		Name: "test-rs",
+		OUID: "ou-123",
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
 		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything, "test-rs").Return(false, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything, "test-identifier").Return(false, nil)
 	suite.mockStore.On("CreateResourceServer", mock.Anything,
-		mock.AnythingOfType("string"), mock.MatchedBy(func(r providers.ResourceServer) bool {
-			return r.Type == providers.ResourceServerTypeCustom
-		})).Return(nil)
+		mock.AnythingOfType("string"), mock.Anything).Return(nil)
 
 	result, err := suite.service.CreateResourceServer(context.Background(), rs)
 
 	suite.Nil(err)
-	suite.NotNil(result)
-	suite.Equal(providers.ResourceServerTypeCustom, result.Type)
-	suite.mockStore.AssertExpectations(suite.T())
+	suite.Require().NotNil(result)
+	suite.Empty(result.Interfaces)
+	suite.mockStore.AssertNotCalled(suite.T(), "CreateResourceServerInterface", mock.Anything, mock.Anything)
 }
 
-func (suite *ResourceServiceTestSuite) TestCreateResourceServer_InvalidType() {
+func (suite *ResourceServiceTestSuite) TestCreateResourceServer_RejectsInvalidInterfaceType() {
 	rs := providers.ResourceServer{
-		Name:       "test-rs",
-		Identifier: "test-identifier",
-		Type:       providers.ResourceServerType("BOGUS"),
-		OUID:       "ou-123",
+		Name: "test-rs",
+		OUID: "ou-123",
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceType("CUSTOM"),
+			Identifier: "https://api.example.com/orders",
+		}},
 	}
 
 	result, err := suite.service.CreateResourceServer(context.Background(), rs)
 
 	suite.Nil(result)
 	suite.NotNil(err)
-	suite.Equal(ErrorInvalidRequestFormat.Code, err.Code)
+	suite.Equal(ErrorInvalidInterfaceType.Code, err.Code)
+}
+
+func (suite *ResourceServiceTestSuite) TestCreateResourceServer_RejectsEmptyInterfaceIdentifier() {
+	rs := providers.ResourceServer{
+		Name: "test-rs",
+		OUID: "ou-123",
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: "",
+		}},
+	}
+
+	result, err := suite.service.CreateResourceServer(context.Background(), rs)
+
+	suite.Nil(result)
+	suite.NotNil(err)
+	suite.Equal(ErrorInvalidInterfaceIdentifier.Code, err.Code)
+}
+
+// An identifier that is not a URI is a valid audience: only a client passing it in the RFC 8707
+// resource parameter needs an absolute URI, and that is validated at request time.
+func (suite *ResourceServiceTestSuite) TestCreateResourceServer_AcceptsNonURIInterfaceIdentifier() {
+	rs := providers.ResourceServer{
+		Name: "test-rs",
+		OUID: "ou-123",
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: "orders",
+		}},
+	}
+
+	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
+		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
+	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything, "test-rs").Return(false, nil)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything, "orders").
+		Return(false, nil)
+	suite.mockStore.On("CreateResourceServer", mock.Anything, mock.AnythingOfType("string"),
+		mock.Anything).Return(nil)
+	suite.mockStore.On("CreateResourceServerInterface", mock.Anything, mock.Anything).Return(nil)
+
+	result, err := suite.service.CreateResourceServer(context.Background(), rs)
+
+	suite.Nil(err)
+	suite.Require().NotNil(result)
+	suite.Require().Len(result.Interfaces, 1)
+	suite.Equal("orders", result.Interfaces[0].Identifier)
+}
+
+func (suite *ResourceServiceTestSuite) TestCreateResourceServer_RejectsDuplicateInterfaceIdentifier() {
+	rs := providers.ResourceServer{
+		Name:       "test-rs",
+		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
+	}
+
+	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
+		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
+	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything, "test-rs").Return(false, nil)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://api.example.com/orders").Return(true, nil)
+
+	result, err := suite.service.CreateResourceServer(context.Background(), rs)
+
+	suite.Nil(result)
+	suite.NotNil(err)
+	suite.Equal(ErrorIdentifierConflict.Code, err.Code)
 }
 
 func (suite *ResourceServiceTestSuite) TestCreateResourceServer_ValidationErrors() {
@@ -279,22 +369,30 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_ValidationErrors
 		expectedError  tidcommon.ServiceError
 	}{
 		{
-			name:           "EmptyName",
-			resourceServer: providers.ResourceServer{Name: "", OUID: "ou-123"},
-			expectedError:  ErrorInvalidRequestFormat,
+			name: "EmptyName",
+			resourceServer: providers.ResourceServer{
+				Name:       "",
+				OUID:       "ou-123",
+				Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
+			},
+			expectedError: ErrorInvalidRequestFormat,
 		},
 		{
-			name:           "EmptyOU",
-			resourceServer: providers.ResourceServer{Name: "test-rs", OUID: ""},
-			expectedError:  ErrorInvalidRequestFormat,
+			name: "EmptyOU",
+			resourceServer: providers.ResourceServer{
+				Name:       "test-rs",
+				OUID:       "",
+				Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
+			},
+			expectedError: ErrorInvalidRequestFormat,
 		},
 		{
 			name: "InvalidDelimiter",
 			resourceServer: providers.ResourceServer{
 				Name:       "test-rs",
-				Identifier: "test-identifier",
 				Delimiter:  "::",
 				OUID:       "ou-123",
+				Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 			},
 			expectedError: ErrorInvalidDelimiter,
 		},
@@ -314,8 +412,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_ValidationErrors
 func (suite *ResourceServiceTestSuite) TestCreateResourceServer_OUNotFound() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
@@ -332,8 +430,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_OUNotFound() {
 func (suite *ResourceServiceTestSuite) TestCreateResourceServer_OUServiceError() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
@@ -349,8 +447,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_OUServiceError()
 func (suite *ResourceServiceTestSuite) TestCreateResourceServer_NameConflict() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
@@ -370,7 +468,7 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_StoreError() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
 		OUID:       "ou-123",
-		Identifier: "test-identifier",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
@@ -378,8 +476,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_StoreError() {
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything,
 		"test-rs").
 		Return(false, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything,
-		"test-identifier").
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://api.example.com/orders").
 		Return(false, nil)
 	suite.mockStore.On("CreateResourceServer", mock.Anything,
 		mock.AnythingOfType("string"), matchResourceServer(rs)).
@@ -395,8 +493,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_StoreError() {
 func (suite *ResourceServiceTestSuite) TestCreateResourceServer_IdentifierConflict() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
@@ -404,8 +502,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_IdentifierConfli
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything,
 		"test-rs").
 		Return(false, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything,
-		"test-identifier").
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://api.example.com/orders").
 		Return(true, nil)
 
 	result, err := suite.service.CreateResourceServer(context.Background(), rs)
@@ -418,8 +516,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_IdentifierConfli
 func (suite *ResourceServiceTestSuite) TestCreateResourceServer_CheckNameError() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
@@ -438,8 +536,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_CheckNameError()
 func (suite *ResourceServiceTestSuite) TestCreateResourceServer_CheckIdentifierError() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
@@ -447,8 +545,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_CheckIdentifierE
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything,
 		"test-rs").
 		Return(false, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything,
-		"test-identifier").
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://api.example.com/orders").
 		Return(false, errors.New("database error"))
 
 	result, err := suite.service.CreateResourceServer(context.Background(), rs)
@@ -533,7 +631,6 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_Success() {
 	rs := providers.ResourceServer{
 		Name:        "updated-rs",
 		Description: "Updated",
-		Identifier:  "new-identifier",
 		OUID:        "ou-123",
 	}
 
@@ -541,16 +638,19 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_Success() {
 		ID:          "rs-123",
 		Name:        "old-name",
 		Description: "Old",
-		Identifier:  "original-identifier",
 		OUID:        "ou-123",
 		Delimiter:   ":",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:               "rsi-123",
+			ResourceServerID: "rs-123",
+			Type:             providers.ResourceServerInterfaceTypeAPI,
+			Identifier:       "https://api.example.com/orders",
+		}},
 	}
 
 	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
 	suite.mockStore.On("GetResourceServer", mock.Anything,
 		"rs-123").Return(existingRS, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything,
-		"new-identifier").Return(false, nil)
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
 		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything,
@@ -559,7 +659,6 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_Success() {
 	suite.mockStore.On("UpdateResourceServer", mock.Anything,
 		"rs-123", mock.MatchedBy(func(r providers.ResourceServer) bool {
 			return r.Name == rs.Name &&
-				r.Identifier == "new-identifier" &&
 				r.Description == rs.Description &&
 				r.Delimiter == existingRS.Delimiter
 		})).Return(nil)
@@ -570,26 +669,33 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_Success() {
 	suite.NotNil(result)
 	suite.Equal("rs-123", result.ID)
 	suite.Equal("updated-rs", result.Name)
-	suite.Equal("new-identifier", result.Identifier)
 }
 
-func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_PreservesType() {
+func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_PreservesInterfaces() {
+	// Interfaces are managed through the nested interface endpoints, so an update never changes them.
 	rs := providers.ResourceServer{
 		Name:        "updated-rs",
 		Description: "Updated",
-		Identifier:  "original-identifier",
-		Type:        providers.ResourceServerTypeMCP, // Should be ignored; type is immutable
 		OUID:        "ou-123",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:         "rsi-injected",
+			Type:       providers.ResourceServerInterfaceTypeMCP,
+			Identifier: "https://attacker.example.com/mcp",
+		}},
 	}
 
 	existingRS := providers.ResourceServer{
 		ID:          "rs-123",
 		Name:        "old-name",
 		Description: "Old",
-		Identifier:  "original-identifier",
-		Type:        providers.ResourceServerTypeAPI,
 		OUID:        "ou-123",
 		Delimiter:   ":",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:               "rsi-123",
+			ResourceServerID: "rs-123",
+			Type:             providers.ResourceServerInterfaceTypeAPI,
+			Identifier:       "https://api.example.com/orders",
+		}},
 	}
 
 	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
@@ -599,22 +705,24 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_PreservesType() 
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything, "updated-rs").Return(false, nil)
 	suite.mockStore.On("UpdateResourceServer", mock.Anything,
 		"rs-123", mock.MatchedBy(func(r providers.ResourceServer) bool {
-			return r.Type == providers.ResourceServerTypeAPI
+			return len(r.Interfaces) == 1 && r.Interfaces[0].ID == "rsi-123"
 		})).Return(nil)
 
 	result, err := suite.service.UpdateResourceServer(context.Background(), "rs-123", rs)
 
 	suite.Nil(err)
 	suite.NotNil(result)
-	suite.Equal(providers.ResourceServerTypeAPI, result.Type)
+	suite.Require().Len(result.Interfaces, 1)
+	suite.Equal("rsi-123", result.Interfaces[0].ID)
+	suite.Equal("https://api.example.com/orders", result.Interfaces[0].Identifier)
 	suite.mockStore.AssertExpectations(suite.T())
 }
 
 func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_NotFound() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockStore.On("GetResourceServer", mock.Anything,
@@ -641,16 +749,24 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_ValidationErrors
 			expectedError:  ErrorMissingID,
 		},
 		{
-			name:           "EmptyName",
-			id:             "rs-123",
-			resourceServer: providers.ResourceServer{Name: "", OUID: "ou-123"},
-			expectedError:  ErrorInvalidRequestFormat,
+			name: "EmptyName",
+			id:   "rs-123",
+			resourceServer: providers.ResourceServer{
+				Name:       "",
+				OUID:       "ou-123",
+				Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
+			},
+			expectedError: ErrorInvalidRequestFormat,
 		},
 		{
-			name:           "EmptyOU",
-			id:             "rs-123",
-			resourceServer: providers.ResourceServer{Name: "test-rs", OUID: ""},
-			expectedError:  ErrorInvalidRequestFormat,
+			name: "EmptyOU",
+			id:   "rs-123",
+			resourceServer: providers.ResourceServer{
+				Name:       "test-rs",
+				OUID:       "",
+				Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
+			},
+			expectedError: ErrorInvalidRequestFormat,
 		},
 	}
 
@@ -668,15 +784,14 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_ValidationErrors
 func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_OUNotFound() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	existingRS := providers.ResourceServer{
-		ID:         "rs-123",
-		Name:       "test-rs",
-		Identifier: "test-identifier",
-		OUID:       "ou-old",
+		ID:   "rs-123",
+		Name: "test-rs",
+		OUID: "ou-old",
 	}
 
 	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
@@ -695,15 +810,14 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_OUNotFound() {
 func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_OUServiceError() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	existingRS := providers.ResourceServer{
-		ID:         "rs-123",
-		Name:       "test-rs",
-		Identifier: "test-identifier",
-		OUID:       "ou-old",
+		ID:   "rs-123",
+		Name: "test-rs",
+		OUID: "ou-old",
 	}
 
 	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
@@ -722,15 +836,14 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_OUServiceError()
 func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_NameConflict() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	existingRS := providers.ResourceServer{
-		ID:         "rs-123",
-		Name:       "old-name",
-		Identifier: "test-identifier",
-		OUID:       "ou-123",
+		ID:   "rs-123",
+		Name: "old-name",
+		OUID: "ou-123",
 	}
 
 	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
@@ -752,15 +865,15 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_NameConflict() {
 func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_StoreError() {
 	rs := providers.ResourceServer{
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	existingRS := providers.ResourceServer{
 		ID:         "rs-123",
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
@@ -781,9 +894,8 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_StoreError() {
 
 func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_GetResourceServerStoreError() {
 	rs := providers.ResourceServer{
-		Name:       "updated-name",
-		Identifier: "test-identifier",
-		OUID:       "ou-123",
+		Name: "updated-name",
+		OUID: "ou-123",
 	}
 
 	// Mock GetResourceServer to return generic database error (not errResourceServerNotFound)
@@ -805,6 +917,8 @@ func (suite *ResourceServiceTestSuite) TestDeleteResourceServer_Success() {
 		"rs-123").Return(providers.ResourceServer{}, nil)
 	suite.mockStore.On("CheckResourceServerHasDependencies", mock.Anything,
 		"rs-123").Return(false, nil)
+	suite.mockStore.On("ListResourceServerInterfaces", mock.Anything, "rs-123").
+		Return([]providers.ResourceServerInterface{}, nil)
 	suite.mockStore.On("DeleteResourceServer", mock.Anything,
 		"rs-123").Return(nil)
 
@@ -860,6 +974,8 @@ func (suite *ResourceServiceTestSuite) TestDeleteResourceServer_DeleteError() {
 		"rs-123").Return(providers.ResourceServer{}, nil)
 	suite.mockStore.On("CheckResourceServerHasDependencies", mock.Anything,
 		"rs-123").Return(false, nil)
+	suite.mockStore.On("ListResourceServerInterfaces", mock.Anything, "rs-123").
+		Return([]providers.ResourceServerInterface{}, nil)
 	suite.mockStore.On("DeleteResourceServer", mock.Anything,
 		"rs-123").Return(errors.New("database error"))
 
@@ -952,6 +1068,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResource_Success() {
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything,
 		"rs-123", "test-handle", (*string)(nil)).
 		Return(false, nil)
+	suite.mockStore.On("CheckActionHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateResource", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123", (*string)(nil), matchResource(res)).
 		Return(nil)
@@ -1015,6 +1133,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResource_MultiLevelHierarchy() 
 		"rs-123").Return(providers.ResourceServer{}, nil).Once()
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything,
 		"rs-123", "root", (*string)(nil)).Return(false, nil).Once()
+	suite.mockStore.On("CheckActionHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateResource", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123",
 		(*string)(nil), matchResource(rootRes)).Return(nil).Once()
@@ -1116,6 +1236,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResource_WithParent_Success() {
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything,
 		"rs-123", "test-handle", &parentID).
 		Return(false, nil)
+	suite.mockStore.On("CheckActionHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateResource", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123", &parentID, matchResource(res)).
 		Return(nil)
@@ -1265,6 +1387,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResource_StoreError() {
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything,
 		"rs-123", "test-handle", (*string)(nil)).
 		Return(false, nil)
+	suite.mockStore.On("CheckActionHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateResource", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123", (*string)(nil), matchResource(res)).
 		Return(errors.New("database error"))
@@ -1299,6 +1423,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResource_SameHandleDifferentPar
 		"parent-a", "rs-123").Return(providers.Resource{}, nil).Once()
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything,
 		"rs-123", "users", &parentA).Return(false, nil).Once()
+	suite.mockStore.On("CheckActionHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateResource", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123", &parentA, matchResource(res1)).
 		Return(nil).Once()
@@ -1344,6 +1470,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResource_SameHandleRootAndChild
 		"rs-123").Return(providers.ResourceServer{}, nil).Once()
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything,
 		"rs-123", "users", (*string)(nil)).Return(false, nil).Once()
+	suite.mockStore.On("CheckActionHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateResource", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123",
 		(*string)(nil), matchResource(rootRes)).Return(nil).Once()
@@ -1387,6 +1515,8 @@ func (suite *ResourceServiceTestSuite) TestCreateAction_SameHandleDifferentScope
 		"rs-123").Return(providers.ResourceServer{}, nil).Once()
 	suite.mockStore.On("CheckActionHandleExists", mock.Anything,
 		"rs-123", (*string)(nil), "read").Return(false, nil).Once()
+	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateAction", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123",
 		(*string)(nil), matchAction(serverAction)).Return(nil).Once()
@@ -1433,6 +1563,8 @@ func (suite *ResourceServiceTestSuite) TestCreateAction_SameHandleDifferentResou
 		"res-a", "rs-123").Return(providers.Resource{}, nil).Once()
 	suite.mockStore.On("CheckActionHandleExists", mock.Anything,
 		"rs-123", &resourceA, "read").Return(false, nil).Once()
+	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateAction", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123",
 		&resourceA, matchAction(action1)).Return(nil).Once()
@@ -1512,6 +1644,8 @@ func (suite *ResourceServiceTestSuite) TestCreateResource_CircularDependency_Sel
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything,
 		"rs-123", "test-handle", (*string)(nil)).
 		Return(false, nil)
+	suite.mockStore.On("CheckActionHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateResource", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123", (*string)(nil), matchResource(res)).
 		Return(nil)
@@ -2364,6 +2498,8 @@ func (suite *ResourceServiceTestSuite) TestCreateActionAtResourceServer_Success(
 	suite.mockStore.On("CheckActionHandleExists", mock.Anything,
 		"rs-123", (*string)(nil), "test-handle").
 		Return(false, nil)
+	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateAction", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123", (*string)(nil),
 		mock.MatchedBy(func(a providers.Action) bool { return a.Handle != "" })).
@@ -2461,6 +2597,8 @@ func (suite *ResourceServiceTestSuite) TestCreateActionAtResourceServer_StoreErr
 	suite.mockStore.On("CheckActionHandleExists", mock.Anything,
 		"rs-123", (*string)(nil), "test-handle").
 		Return(false, nil)
+	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateAction", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123", (*string)(nil),
 		mock.MatchedBy(func(a providers.Action) bool { return a.Handle != "" })).
@@ -2540,6 +2678,8 @@ func (suite *ResourceServiceTestSuite) TestCreateActionAtResource_Success() {
 		"res-123", "rs-123").Return(providers.Resource{}, nil)
 	suite.mockStore.On("CheckActionHandleExists", mock.Anything,
 		"rs-123", &resourceID, "test-handle").Return(false, nil)
+	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateAction", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123",
 		&resourceID, matchAction(action)).Return(nil)
@@ -2620,6 +2760,8 @@ func (suite *ResourceServiceTestSuite) TestCreateActionAtResource_StoreError() {
 		testResourceID, "rs-123").Return(providers.Resource{}, nil)
 	suite.mockStore.On("CheckActionHandleExists", mock.Anything,
 		"rs-123", &resID, "test-handle").Return(false, nil)
+	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything).Return(false, nil).Maybe()
 	suite.mockStore.On("CreateAction", mock.Anything,
 		mock.AnythingOfType("string"), "rs-123", &resID, matchAction(action)).
 		Return(errors.New("database error"))
@@ -2672,41 +2814,33 @@ func (suite *ResourceServiceTestSuite) TestCreateActionAtResource_CheckResourceE
 	suite.Equal(tidcommon.InternalServerError.Code, err.Code)
 }
 
-// TestCreateAction_KindHandling covers kind defaulting and acceptance across resource server types:
-// MCP defaults an omitted kind to "tool"; an explicit valid kind is preserved for any type; and an
-// omitted kind on API/CUSTOM stays empty.
+// TestCreateAction_KindHandling covers action kind acceptance. The kind is declared per action and
+// is independent of the interfaces the resource server exposes: an explicit valid kind is preserved
+// and an omitted kind stays empty.
 func (suite *ResourceServiceTestSuite) TestCreateAction_KindHandling() {
 	cases := []struct {
 		name         string
 		rsID         string
-		rsType       providers.ResourceServerType
-		mcpCrossEnt  bool
 		requestKind  providers.ActionKind
 		expectedKind providers.ActionKind
 	}{
-		{"MCP omitted defaults to tool", "rs-mcp", providers.ResourceServerTypeMCP, true,
-			"", providers.ActionKindTool},
-		{"MCP explicit tool preserved", "rs-mcp", providers.ResourceServerTypeMCP, true,
+		{"explicit tool preserved", "rs-mcp", providers.ActionKindTool, providers.ActionKindTool},
+		{"explicit resource preserved", "rs-mcp", providers.ActionKindResource, providers.ActionKindResource},
+		{"omitted stays empty", "rs-mcp", "", ""},
+		{"explicit tool allowed without an MCP interface", "rs-api",
 			providers.ActionKindTool, providers.ActionKindTool},
-		{"MCP explicit resource preserved", "rs-mcp", providers.ResourceServerTypeMCP, true,
-			providers.ActionKindResource, providers.ActionKindResource},
-		{"API explicit tool allowed", "rs-api", providers.ResourceServerTypeAPI, false,
-			providers.ActionKindTool, providers.ActionKindTool},
-		{"API omitted stays empty", "rs-api", providers.ResourceServerTypeAPI, false,
-			"", ""},
+		{"omitted stays empty without an MCP interface", "rs-api", "", ""},
 	}
 
 	for _, tc := range cases {
 		suite.Run(tc.name, func() {
 			suite.SetupTest()
 			suite.mockStore.On("GetResourceServer", mock.Anything, tc.rsID).
-				Return(providers.ResourceServer{Type: tc.rsType, Delimiter: ":"}, nil)
+				Return(providers.ResourceServer{Delimiter: ":"}, nil)
 			suite.mockStore.On("CheckActionHandleExists", mock.Anything, tc.rsID, (*string)(nil), "h").
 				Return(false, nil)
-			if tc.mcpCrossEnt {
-				suite.mockStore.On("CheckResourceHandleExists", mock.Anything, tc.rsID, "h", (*string)(nil)).
-					Return(false, nil)
-			}
+			suite.mockStore.On("CheckResourceHandleExists", mock.Anything, tc.rsID, "h", (*string)(nil)).
+				Return(false, nil)
 			expectedKind := tc.expectedKind
 			suite.mockStore.On("CreateAction", mock.Anything, mock.AnythingOfType("string"),
 				tc.rsID, (*string)(nil), mock.MatchedBy(func(a providers.Action) bool {
@@ -2725,22 +2859,21 @@ func (suite *ResourceServiceTestSuite) TestCreateAction_KindHandling() {
 }
 
 // TestCreateAction_InvalidKindRejected verifies a provided-but-unsupported kind is rejected with a
-// 400 regardless of the resource server type.
+// 400.
 func (suite *ResourceServiceTestSuite) TestCreateAction_InvalidKindRejected() {
 	cases := []struct {
-		name   string
-		rsID   string
-		rsType providers.ResourceServerType
+		name string
+		rsID string
 	}{
-		{"MCP", "rs-mcp", providers.ResourceServerTypeMCP},
-		{"API", "rs-api", providers.ResourceServerTypeAPI},
+		{"MCPInterface", "rs-mcp"},
+		{"APIInterface", "rs-api"},
 	}
 
 	for _, tc := range cases {
 		suite.Run(tc.name, func() {
 			suite.SetupTest()
 			suite.mockStore.On("GetResourceServer", mock.Anything, tc.rsID).
-				Return(providers.ResourceServer{Type: tc.rsType, Delimiter: ":"}, nil)
+				Return(providers.ResourceServer{Delimiter: ":"}, nil)
 
 			result, err := suite.service.CreateAction(context.Background(), tc.rsID, nil,
 				providers.Action{Name: "n", Handle: "h", Kind: providers.ActionKind("prompt")})
@@ -2752,9 +2885,9 @@ func (suite *ResourceServiceTestSuite) TestCreateAction_InvalidKindRejected() {
 	}
 }
 
-func (suite *ResourceServiceTestSuite) TestCreateAction_MCP_ActionHandleCollidesWithGroup() {
+func (suite *ResourceServiceTestSuite) TestCreateAction_ActionHandleCollidesWithGroup() {
 	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-mcp").
-		Return(providers.ResourceServer{Type: providers.ResourceServerTypeMCP, Delimiter: ":"}, nil)
+		Return(providers.ResourceServer{Delimiter: ":"}, nil)
 	suite.mockStore.On("CheckActionHandleExists", mock.Anything, "rs-mcp", (*string)(nil), "deploy").
 		Return(false, nil)
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, "rs-mcp", "deploy", (*string)(nil)).
@@ -2768,10 +2901,12 @@ func (suite *ResourceServiceTestSuite) TestCreateAction_MCP_ActionHandleCollides
 	suite.Equal(ErrorHandleConflict.Code, err.Code)
 }
 
-func (suite *ResourceServiceTestSuite) TestCreateAction_API_NoCrossEntityCheck() {
+func (suite *ResourceServiceTestSuite) TestCreateAction_CrossEntityCheckAlwaysRuns() {
 	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-api").
-		Return(providers.ResourceServer{Type: providers.ResourceServerTypeAPI, Delimiter: ":"}, nil)
+		Return(providers.ResourceServer{Delimiter: ":"}, nil)
 	suite.mockStore.On("CheckActionHandleExists", mock.Anything, "rs-api", (*string)(nil), "deploy").
+		Return(false, nil)
+	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, "rs-api", "deploy", (*string)(nil)).
 		Return(false, nil)
 	suite.mockStore.On("CreateAction", mock.Anything, mock.AnythingOfType("string"),
 		"rs-api", (*string)(nil), mock.MatchedBy(func(a providers.Action) bool {
@@ -2783,14 +2918,12 @@ func (suite *ResourceServiceTestSuite) TestCreateAction_API_NoCrossEntityCheck()
 
 	suite.Nil(err)
 	suite.NotNil(result)
-	suite.mockStore.AssertNotCalled(suite.T(), "CheckResourceHandleExists",
-		mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	suite.mockStore.AssertExpectations(suite.T())
 }
 
-func (suite *ResourceServiceTestSuite) TestCreateResource_MCP_GroupHandleCollidesWithAction() {
+func (suite *ResourceServiceTestSuite) TestCreateResource_GroupHandleCollidesWithAction() {
 	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-mcp").
-		Return(providers.ResourceServer{Type: providers.ResourceServerTypeMCP, Delimiter: ":"}, nil)
+		Return(providers.ResourceServer{Delimiter: ":"}, nil)
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, "rs-mcp", "deploy", (*string)(nil)).
 		Return(false, nil)
 	suite.mockStore.On("CheckActionHandleExists", mock.Anything, "rs-mcp", (*string)(nil), "deploy").
@@ -2804,10 +2937,12 @@ func (suite *ResourceServiceTestSuite) TestCreateResource_MCP_GroupHandleCollide
 	suite.Equal(ErrorHandleConflict.Code, err.Code)
 }
 
-func (suite *ResourceServiceTestSuite) TestCreateResource_API_NoCrossEntityCheck() {
+func (suite *ResourceServiceTestSuite) TestCreateResource_CrossEntityCheckAlwaysRuns() {
 	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-api").
-		Return(providers.ResourceServer{Type: providers.ResourceServerTypeAPI, Delimiter: ":"}, nil)
+		Return(providers.ResourceServer{Delimiter: ":"}, nil)
 	suite.mockStore.On("CheckResourceHandleExists", mock.Anything, "rs-api", "deploy", (*string)(nil)).
+		Return(false, nil)
+	suite.mockStore.On("CheckActionHandleExists", mock.Anything, "rs-api", (*string)(nil), "deploy").
 		Return(false, nil)
 	suite.mockStore.On("CreateResource", mock.Anything, mock.AnythingOfType("string"),
 		"rs-api", (*string)(nil), mock.MatchedBy(func(r providers.Resource) bool {
@@ -2819,8 +2954,6 @@ func (suite *ResourceServiceTestSuite) TestCreateResource_API_NoCrossEntityCheck
 
 	suite.Nil(err)
 	suite.NotNil(result)
-	suite.mockStore.AssertNotCalled(suite.T(), "CheckActionHandleExists",
-		mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	suite.mockStore.AssertExpectations(suite.T())
 }
 
@@ -2836,7 +2969,7 @@ func (suite *ResourceServiceTestSuite) TestUpdateAction_KindImmutable() {
 
 	suite.mockStore.On("IsResourceServerDeclarative", "rs-mcp").Return(false)
 	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-mcp").
-		Return(providers.ResourceServer{Type: providers.ResourceServerTypeMCP, Delimiter: ":"}, nil)
+		Return(providers.ResourceServer{Delimiter: ":"}, nil)
 	suite.mockStore.On("GetResource", mock.Anything, resID, "rs-mcp").Return(providers.Resource{}, nil)
 	suite.mockStore.On("GetAction", mock.Anything, "act-1", "rs-mcp", &resID).
 		Return(currentAction, nil)
@@ -2866,7 +2999,7 @@ func (suite *ResourceServiceTestSuite) TestUpdateAction_KindChangeRejected() {
 
 	suite.mockStore.On("IsResourceServerDeclarative", "rs-mcp").Return(false)
 	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-mcp").
-		Return(providers.ResourceServer{Type: providers.ResourceServerTypeMCP, Delimiter: ":"}, nil)
+		Return(providers.ResourceServer{Delimiter: ":"}, nil)
 	suite.mockStore.On("GetResource", mock.Anything, resID, "rs-mcp").Return(providers.Resource{}, nil)
 	suite.mockStore.On("GetAction", mock.Anything, "act-1", "rs-mcp", &resID).
 		Return(currentAction, nil)
@@ -4508,7 +4641,7 @@ func (suite *ResourceServiceTestSuite) TestPermissionHierarchyIntegration() {
 
 	for _, tc := range testCases {
 		suite.Run(tc.name, func() {
-			rs := providers.ResourceServer{Identifier: "test", Delimiter: tc.delimiter}
+			rs := providers.ResourceServer{Delimiter: tc.delimiter}
 
 			// Level 1
 			perm1 := derivePermission(rs, nil, tc.expectedLevel1)
@@ -4714,10 +4847,9 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_ImmutableDeclara
 	// Test that updating a declarative resource server returns an immutability error
 	resourceServerID := declarativeRSID
 	updateReq := providers.ResourceServer{
-		ID:         resourceServerID,
-		Name:       "Updated Name",
-		Identifier: "test-identifier",
-		OUID:       "ou-1",
+		ID:   resourceServerID,
+		Name: "Updated Name",
+		OUID: "ou-1",
 	}
 
 	// Mock IsResourceServerDeclarative to return true
@@ -4740,18 +4872,22 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_ImmutableDeclara
 func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_MutableResource() {
 	resourceServerID := "mutable-rs"
 	updateReq := providers.ResourceServer{
-		ID:         resourceServerID,
-		Name:       "Updated Name",
-		OUID:       "ou-1",
-		Identifier: "original-identifier",
+		ID:   resourceServerID,
+		Name: "Updated Name",
+		OUID: "ou-1",
 	}
 
 	existingRS := providers.ResourceServer{
-		ID:         resourceServerID,
-		Name:       "Original Name",
-		OUID:       "ou-1",
-		Identifier: "original-identifier",
-		Delimiter:  ":",
+		ID:        resourceServerID,
+		Name:      "Original Name",
+		OUID:      "ou-1",
+		Delimiter: ":",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:               "rsi-1",
+			ResourceServerID: resourceServerID,
+			Type:             providers.ResourceServerInterfaceTypeAPI,
+			Identifier:       "https://api.example.com/orders",
+		}},
 	}
 
 	suite.mockStore.On("IsResourceServerDeclarative", resourceServerID).Return(false)
@@ -4763,7 +4899,7 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_MutableResource(
 		Return(false, nil)
 	suite.mockStore.On("UpdateResourceServer", mock.Anything, resourceServerID,
 		mock.MatchedBy(func(r providers.ResourceServer) bool {
-			return r.Identifier == existingRS.Identifier
+			return len(r.Interfaces) == 1 && r.Interfaces[0].ID == "rsi-1"
 		})).Return(nil)
 
 	result, svcErr := suite.service.UpdateResourceServer(context.Background(), resourceServerID, updateReq)
@@ -4771,7 +4907,8 @@ func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_MutableResource(
 	suite.Nil(svcErr)
 	suite.NotNil(result)
 	suite.Equal("Updated Name", result.Name)
-	suite.Equal("original-identifier", result.Identifier)
+	suite.Require().Len(result.Interfaces, 1)
+	suite.Equal("https://api.example.com/orders", result.Interfaces[0].Identifier)
 
 	suite.mockStore.AssertExpectations(suite.T())
 	suite.mockOU.AssertExpectations(suite.T())
@@ -4806,6 +4943,8 @@ func (suite *ResourceServiceTestSuite) TestDeleteResourceServer_MutableResource(
 	suite.mockStore.On("GetResourceServer", mock.Anything, resourceServerID).
 		Return(providers.ResourceServer{ID: resourceServerID}, nil)
 	suite.mockStore.On("CheckResourceServerHasDependencies", mock.Anything, resourceServerID).Return(false, nil)
+	suite.mockStore.On("ListResourceServerInterfaces", mock.Anything, resourceServerID).
+		Return([]providers.ResourceServerInterface{}, nil)
 	suite.mockStore.On("DeleteResourceServer", mock.Anything, resourceServerID).Return(nil)
 
 	// Execute the test
@@ -4905,96 +5044,215 @@ func (suite *ResourceServiceTestSuite) TestDeleteAction_ImmutableDeclarativeReso
 	suite.mockStore.AssertExpectations(suite.T())
 }
 
-// UpdateResourceServer identifier mutability tests
+// Resource Server Interface tests
 
-func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_IdentifierChanged() {
-	rs := providers.ResourceServer{
-		Name:       "my-rs",
-		Identifier: "https://api.example.com/new/",
-		OUID:       "ou-123",
-	}
-
-	existingRS := providers.ResourceServer{
-		ID:         "rs-123",
-		Name:       "my-rs",
-		Identifier: "https://api.example.com/old/",
-		Delimiter:  ":",
-		OUID:       "ou-123",
-	}
-
-	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
-	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-123").Return(existingRS, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything,
-		"https://api.example.com/new/").Return(false, nil)
-	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
-		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
-	suite.mockStore.On("UpdateResourceServer", mock.Anything, "rs-123",
-		mock.MatchedBy(func(r providers.ResourceServer) bool {
-			return r.Identifier == "https://api.example.com/new/"
+func (suite *ResourceServiceTestSuite) TestCreateResourceServerInterface_Success() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID, Delimiter: ":"}, nil)
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://localhost:8090/mcp").Return(false, nil)
+	suite.mockStore.On("CreateResourceServerInterface", mock.Anything,
+		mock.MatchedBy(func(rsi providers.ResourceServerInterface) bool {
+			return rsi.ID != "" && rsi.ResourceServerID == testResourceServerID &&
+				rsi.Type == providers.ResourceServerInterfaceTypeMCP
 		})).Return(nil)
 
-	result, svcErr := suite.service.UpdateResourceServer(context.Background(), "rs-123", rs)
+	result, svcErr := suite.service.CreateResourceServerInterface(context.Background(), testResourceServerID,
+		providers.ResourceServerInterface{
+			Type:       providers.ResourceServerInterfaceTypeMCP,
+			Identifier: "https://localhost:8090/mcp",
+		})
 
 	suite.Nil(svcErr)
 	suite.NotNil(result)
-	suite.Equal("https://api.example.com/new/", result.Identifier)
+	suite.NotEmpty(result.ID)
+	suite.Equal(testResourceServerID, result.ResourceServerID)
 	suite.mockStore.AssertExpectations(suite.T())
 }
 
-func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_IdentifierConflict() {
-	rs := providers.ResourceServer{
-		Name:       "updated-rs",
-		Identifier: "https://api.example.com/taken/",
-		OUID:       "ou-123",
-	}
+// A resource server may expose several interfaces of the same type as long as the identifiers differ.
+func (suite *ResourceServiceTestSuite) TestCreateResourceServerInterface_SecondInterfaceOfSameType() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{
+			ID: testResourceServerID,
+			Interfaces: []providers.ResourceServerInterface{{
+				ID:         "rsi-1",
+				Type:       providers.ResourceServerInterfaceTypeAPI,
+				Identifier: "https://api.example.com/v1",
+			}},
+		}, nil)
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://api.example.com/v2").Return(false, nil)
+	suite.mockStore.On("CreateResourceServerInterface", mock.Anything, mock.Anything).Return(nil)
 
-	existingRS := providers.ResourceServer{
-		ID:         "rs-123",
-		Name:       "old-name",
-		Identifier: "https://api.example.com/original/",
-		Delimiter:  ":",
-		OUID:       "ou-123",
-	}
+	result, svcErr := suite.service.CreateResourceServerInterface(context.Background(), testResourceServerID,
+		providers.ResourceServerInterface{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: "https://api.example.com/v2",
+		})
 
-	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
-	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-123").Return(existingRS, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything,
-		"https://api.example.com/taken/").Return(true, nil)
+	suite.Nil(svcErr)
+	suite.NotNil(result)
+	suite.mockStore.AssertExpectations(suite.T())
+}
 
-	result, svcErr := suite.service.UpdateResourceServer(context.Background(), "rs-123", rs)
+func (suite *ResourceServiceTestSuite) TestCreateResourceServerInterface_DuplicateIdentifier() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://api.example.com/orders").Return(true, nil)
+
+	result, svcErr := suite.service.CreateResourceServerInterface(context.Background(), testResourceServerID,
+		testAPIInterface())
 
 	suite.Nil(result)
 	suite.NotNil(svcErr)
 	suite.Equal(ErrorIdentifierConflict.Code, svcErr.Code)
-	suite.mockStore.AssertExpectations(suite.T())
 }
 
-func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_IdentifierCheckStoreError() {
-	rs := providers.ResourceServer{
-		Name:       "updated-rs",
-		Identifier: "https://api.example.com/new/",
-		OUID:       "ou-123",
-	}
+func (suite *ResourceServiceTestSuite) TestCreateResourceServerInterface_DeclarativeRejected() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, declarativeRSID).
+		Return(providers.ResourceServer{ID: declarativeRSID}, nil)
+	suite.mockStore.On("IsResourceServerDeclarative", declarativeRSID).Return(true)
 
-	existingRS := providers.ResourceServer{
-		ID:         "rs-123",
-		Name:       "old-name",
-		Identifier: "https://api.example.com/old/",
-		Delimiter:  ":",
-		OUID:       "ou-123",
-	}
-
-	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
-	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-123").Return(existingRS, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything,
-		"https://api.example.com/new/").Return(false, errors.New("db error"))
-
-	result, svcErr := suite.service.UpdateResourceServer(context.Background(), "rs-123", rs)
+	result, svcErr := suite.service.CreateResourceServerInterface(context.Background(), declarativeRSID,
+		testAPIInterface())
 
 	suite.Nil(result)
 	suite.NotNil(svcErr)
-	suite.Equal(tidcommon.InternalServerError.Code, svcErr.Code)
+	suite.Equal(ErrorImmutableResourceServer.Code, svcErr.Code)
+}
+
+func (suite *ResourceServiceTestSuite) TestGetResourceServerInterface_WrongOwnerNotFound() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("GetResourceServerInterface", mock.Anything, "rsi-other").
+		Return(providers.ResourceServerInterface{ID: "rsi-other", ResourceServerID: "rs-999"}, nil)
+
+	result, svcErr := suite.service.GetResourceServerInterface(context.Background(), testResourceServerID, "rsi-other")
+
+	suite.Nil(result)
+	suite.NotNil(svcErr)
+	suite.Equal(ErrorResourceServerInterfaceNotFound.Code, svcErr.Code)
+}
+
+func (suite *ResourceServiceTestSuite) TestGetResourceServerInterfaceList_Success() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("ListResourceServerInterfaces", mock.Anything, testResourceServerID).
+		Return([]providers.ResourceServerInterface{
+			{ID: "rsi-api", Type: providers.ResourceServerInterfaceTypeAPI},
+			{ID: "rsi-mcp", Type: providers.ResourceServerInterfaceTypeMCP},
+		}, nil)
+
+	result, svcErr := suite.service.GetResourceServerInterfaceList(context.Background(), testResourceServerID)
+
+	suite.Nil(svcErr)
+	suite.Len(result, 2)
+}
+
+func (suite *ResourceServiceTestSuite) TestUpdateResourceServerInterface_Success() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("GetResourceServerInterface", mock.Anything, "rsi-1").
+		Return(providers.ResourceServerInterface{
+			ID:               "rsi-1",
+			ResourceServerID: testResourceServerID,
+			Type:             providers.ResourceServerInterfaceTypeAPI,
+			Identifier:       "https://api.example.com/v1",
+		}, nil)
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://api.example.com/v2").Return(false, nil)
+	suite.mockStore.On("UpdateResourceServerInterface", mock.Anything,
+		mock.MatchedBy(func(rsi providers.ResourceServerInterface) bool {
+			return rsi.ID == "rsi-1" && rsi.ResourceServerID == testResourceServerID &&
+				rsi.Identifier == "https://api.example.com/v2"
+		})).Return(nil)
+
+	result, svcErr := suite.service.UpdateResourceServerInterface(context.Background(), testResourceServerID, "rsi-1",
+		providers.ResourceServerInterface{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: "https://api.example.com/v2",
+		})
+
+	suite.Nil(svcErr)
+	suite.NotNil(result)
+	suite.Equal("https://api.example.com/v2", result.Identifier)
 	suite.mockStore.AssertExpectations(suite.T())
+}
+
+// An update cannot move an interface to another resource server: ownership comes from the path.
+func (suite *ResourceServiceTestSuite) TestUpdateResourceServerInterface_OwnershipNotChangeable() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("GetResourceServerInterface", mock.Anything, "rsi-1").
+		Return(providers.ResourceServerInterface{
+			ID:               "rsi-1",
+			ResourceServerID: testResourceServerID,
+			Type:             providers.ResourceServerInterfaceTypeAPI,
+			Identifier:       "https://api.example.com/v1",
+		}, nil)
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+	suite.mockStore.On("UpdateResourceServerInterface", mock.Anything,
+		mock.MatchedBy(func(rsi providers.ResourceServerInterface) bool {
+			return rsi.ResourceServerID == testResourceServerID
+		})).Return(nil)
+
+	result, svcErr := suite.service.UpdateResourceServerInterface(context.Background(), testResourceServerID, "rsi-1",
+		providers.ResourceServerInterface{
+			ResourceServerID: "rs-hijack",
+			Type:             providers.ResourceServerInterfaceTypeAPI,
+			Identifier:       "https://api.example.com/v1",
+		})
+
+	suite.Nil(svcErr)
+	suite.Equal(testResourceServerID, result.ResourceServerID)
+	suite.mockStore.AssertExpectations(suite.T())
+}
+
+func (suite *ResourceServiceTestSuite) TestDeleteResourceServerInterface_Success() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("GetResourceServerInterface", mock.Anything, "rsi-2").
+		Return(providers.ResourceServerInterface{ID: "rsi-2", ResourceServerID: testResourceServerID}, nil)
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+	suite.mockStore.On("DeleteResourceServerInterface", mock.Anything, "rsi-2").Return(nil)
+
+	svcErr := suite.service.DeleteResourceServerInterface(context.Background(), testResourceServerID, "rsi-2")
+
+	suite.Nil(svcErr)
+	suite.mockStore.AssertExpectations(suite.T())
+}
+
+// The last interface may be deleted: the resource server then keeps its permissions but has no
+// audience, the same state a Custom resource server is created in.
+func (suite *ResourceServiceTestSuite) TestDeleteResourceServerInterface_FinalInterfaceAllowed() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("GetResourceServerInterface", mock.Anything, "rsi-1").
+		Return(providers.ResourceServerInterface{ID: "rsi-1", ResourceServerID: testResourceServerID}, nil)
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+	suite.mockStore.On("DeleteResourceServerInterface", mock.Anything, "rsi-1").Return(nil)
+
+	svcErr := suite.service.DeleteResourceServerInterface(context.Background(), testResourceServerID, "rsi-1")
+
+	suite.Nil(svcErr)
+	suite.mockStore.AssertExpectations(suite.T())
+}
+
+func (suite *ResourceServiceTestSuite) TestDeleteResourceServerInterface_MissingIsIdempotent() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("GetResourceServerInterface", mock.Anything, "rsi-gone").
+		Return(providers.ResourceServerInterface{}, errResourceServerInterfaceNotFound)
+
+	svcErr := suite.service.DeleteResourceServerInterface(context.Background(), testResourceServerID, "rsi-gone")
+
+	suite.Nil(svcErr)
 }
 
 // TestResolveResourceServerOUHandle_OUHandleResolved verifies that when only ou_handle is set,
@@ -5076,15 +5334,15 @@ func (suite *ResourceServiceTestSuite) TestCreateResourceServer_IDConflict() {
 	rs := providers.ResourceServer{
 		ID:         "rs-existing",
 		Name:       "test-rs",
-		Identifier: "test-identifier",
 		OUID:       "ou-123",
+		Interfaces: []providers.ResourceServerInterface{testAPIInterface()},
 	}
 
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
 		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything, "test-rs").
 		Return(false, nil)
-	suite.mockStore.On("CheckResourceServerIdentifierExists", mock.Anything, "test-identifier").
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything, "https://api.example.com/orders").
 		Return(false, nil)
 	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-existing").
 		Return(providers.ResourceServer{ID: "rs-existing"}, nil)
@@ -5120,22 +5378,21 @@ func (suite *ResourceServiceTestSuite) TestGetResourceServerByIdentifier_StoreEr
 
 func (suite *ResourceServiceTestSuite) TestUpdateResourceServer_CheckNameError() {
 	rs := providers.ResourceServer{
-		Name:       testUpdatedName,
-		Identifier: "test-identifier",
-		OUID:       "ou-123",
+		Name: testUpdatedName,
+		OUID: "ou-123",
 	}
 
-	suite.mockStore.On("IsResourceServerDeclarative", "rs-123").Return(false)
-	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-123").
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
 		Return(providers.ResourceServer{
-			ID: "rs-123", Name: testOriginalName, Identifier: "test-identifier", OUID: "ou-123",
+			ID: testResourceServerID, Name: testOriginalName, OUID: "ou-123",
 		}, nil)
 	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
 		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
 	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything, testUpdatedName).
 		Return(false, errors.New("database error"))
 
-	result, err := suite.service.UpdateResourceServer(context.Background(), "rs-123", rs)
+	result, err := suite.service.UpdateResourceServer(context.Background(), testResourceServerID, rs)
 
 	suite.Nil(result)
 	suite.NotNil(err)
@@ -5148,6 +5405,10 @@ id: rs1
 name: Server
 handle: server
 ouHandle: default
+interfaces:
+  - id: rsi1
+    type: API
+    identifier: https://api.example.com/server
 `)
 	rs, err := parseToResourceServer(yamlData)
 
@@ -5160,4 +5421,211 @@ ouHandle: default
 	if rs.OUID != "" {
 		t.Errorf("OUID = %q, want empty (resolution happens later)", rs.OUID)
 	}
+}
+
+// Interface-based audience selection tests
+
+// One resource server exposing an API and an MCP interface must resolve each identifier to its own
+// interface while reporting the same resource server, so API and MCP tokens carry distinct audiences
+// but authorize against one shared permission set.
+func (suite *ResourceServiceTestSuite) TestGetResourceServerByIdentifier_NarrowsToSelectedInterface() {
+	const (
+		apiIdentifier = "https://api.example.com/system"
+		mcpIdentifier = "https://localhost:8090/mcp"
+	)
+	systemRS := providers.ResourceServer{
+		ID:   "rs-system",
+		Name: "System",
+		Interfaces: []providers.ResourceServerInterface{
+			{
+				ID:               "rsi-api",
+				ResourceServerID: "rs-system",
+				Type:             providers.ResourceServerInterfaceTypeAPI,
+				Identifier:       apiIdentifier,
+			},
+			{
+				ID:               "rsi-mcp",
+				ResourceServerID: "rs-system",
+				Type:             providers.ResourceServerInterfaceTypeMCP,
+				Identifier:       mcpIdentifier,
+			},
+		},
+	}
+
+	suite.mockStore.On("GetResourceServerByIdentifier", mock.Anything, apiIdentifier).
+		Return(systemRS, nil)
+	suite.mockStore.On("GetResourceServerByIdentifier", mock.Anything, mcpIdentifier).
+		Return(systemRS, nil)
+
+	resolvedAPI, svcErr := suite.service.GetResourceServerByIdentifier(context.Background(), apiIdentifier)
+	suite.Nil(svcErr)
+	suite.Require().NotNil(resolvedAPI)
+	suite.Require().Len(resolvedAPI.Interfaces, 1)
+	suite.Equal("rsi-api", resolvedAPI.Interfaces[0].ID)
+	suite.Equal(apiIdentifier, resolvedAPI.Interfaces[0].Identifier)
+
+	resolvedMCP, svcErr := suite.service.GetResourceServerByIdentifier(context.Background(), mcpIdentifier)
+	suite.Nil(svcErr)
+	suite.Require().NotNil(resolvedMCP)
+	suite.Require().Len(resolvedMCP.Interfaces, 1)
+	suite.Equal("rsi-mcp", resolvedMCP.Interfaces[0].ID)
+	suite.Equal(mcpIdentifier, resolvedMCP.Interfaces[0].Identifier)
+
+	// Same resource server both times: permissions and role assignments are not duplicated per interface.
+	suite.Equal("rs-system", resolvedAPI.ID)
+	suite.Equal(resolvedAPI.ID, resolvedMCP.ID)
+	suite.mockStore.AssertExpectations(suite.T())
+}
+
+func (suite *ResourceServiceTestSuite) TestGetResourceServerByIdentifier_UnknownIdentifier() {
+	suite.mockStore.On("GetResourceServerByIdentifier", mock.Anything, "https://unknown.example.com").
+		Return(providers.ResourceServer{}, errResourceServerNotFound)
+
+	result, svcErr := suite.service.GetResourceServerByIdentifier(
+		context.Background(), "https://unknown.example.com")
+
+	suite.Nil(result)
+	suite.NotNil(svcErr)
+	suite.Equal(ErrorResourceServerNotFound.Code, svcErr.Code)
+}
+
+// An empty identifier is not a request for the default: only the default-aware provider resolves that.
+func (suite *ResourceServiceTestSuite) TestGetResourceServerByIdentifier_EmptyIdentifierNotFound() {
+	result, svcErr := suite.service.GetResourceServerByIdentifier(context.Background(), "")
+
+	suite.Nil(result)
+	suite.NotNil(svcErr)
+	suite.Equal(ErrorResourceServerNotFound.Code, svcErr.Code)
+}
+
+// A declarative or imported document may declare several interfaces; creation persists all of them
+// in one transaction rather than silently dropping the extras.
+func (suite *ResourceServiceTestSuite) TestCreateResourceServer_CreatesEveryDeclaredInterface() {
+	rs := providers.ResourceServer{
+		ID:   "rs-system",
+		Name: "System",
+		OUID: "ou-123",
+		Interfaces: []providers.ResourceServerInterface{
+			{ID: "rsi-api", Type: providers.ResourceServerInterfaceTypeAPI, Identifier: "https://localhost:8090"},
+			{ID: "rsi-mcp", Type: providers.ResourceServerInterfaceTypeMCP, Identifier: "https://localhost:8090/mcp"},
+		},
+	}
+
+	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
+		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
+	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything, "System").Return(false, nil)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://localhost:8090").Return(false, nil)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://localhost:8090/mcp").Return(false, nil)
+	suite.mockStore.On("GetResourceServer", mock.Anything, "rs-system").
+		Return(providers.ResourceServer{}, errResourceServerNotFound)
+	suite.mockStore.On("CreateResourceServer", mock.Anything, "rs-system", mock.Anything).Return(nil)
+
+	// Declared interface IDs are honored so the interfaces stay stable across re-imports.
+	suite.mockStore.On("CreateResourceServerInterface", mock.Anything,
+		mock.MatchedBy(func(rsi providers.ResourceServerInterface) bool {
+			return rsi.ID == "rsi-api" && rsi.ResourceServerID == "rs-system"
+		})).Return(nil)
+	suite.mockStore.On("CreateResourceServerInterface", mock.Anything,
+		mock.MatchedBy(func(rsi providers.ResourceServerInterface) bool {
+			return rsi.ID == "rsi-mcp" && rsi.ResourceServerID == "rs-system"
+		})).Return(nil)
+
+	result, svcErr := suite.service.CreateResourceServer(context.Background(), rs)
+
+	suite.Nil(svcErr)
+	suite.Require().NotNil(result)
+	suite.Require().Len(result.Interfaces, 2)
+	suite.Equal("rsi-api", result.Interfaces[0].ID)
+	suite.Equal("rsi-mcp", result.Interfaces[1].ID)
+	suite.mockStore.AssertExpectations(suite.T())
+}
+
+func (suite *ResourceServiceTestSuite) TestCreateResourceServer_RejectsDuplicateIdentifiersInRequest() {
+	rs := providers.ResourceServer{
+		Name: "System",
+		OUID: "ou-123",
+		Interfaces: []providers.ResourceServerInterface{
+			{Type: providers.ResourceServerInterfaceTypeAPI, Identifier: "https://localhost:8090"},
+			{Type: providers.ResourceServerInterfaceTypeMCP, Identifier: "https://localhost:8090"},
+		},
+	}
+
+	suite.mockOU.On("GetOrganizationUnit", mock.Anything, "ou-123").
+		Return(providers.OrganizationUnit{ID: "ou-123"}, nil)
+	suite.mockStore.On("CheckResourceServerNameExists", mock.Anything, "System").Return(false, nil)
+	suite.mockStore.On("CheckResourceServerInterfaceIdentifierExists", mock.Anything,
+		"https://localhost:8090").Return(false, nil)
+
+	result, svcErr := suite.service.CreateResourceServer(context.Background(), rs)
+
+	suite.Nil(result)
+	suite.NotNil(svcErr)
+	suite.Equal(ErrorIdentifierConflict.Code, svcErr.Code)
+}
+
+// Deleting an interface that a server configuration section still references must be refused,
+// otherwise the section keeps a dangling ID and default resolution starts failing at runtime.
+func (suite *ResourceServiceTestSuite) TestDeleteResourceServerInterface_BlockedByReferencingConfig() {
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("GetResourceServerInterface", mock.Anything, "rsi-default").
+		Return(providers.ResourceServerInterface{
+			ID: "rsi-default", ResourceServerID: testResourceServerID,
+		}, nil)
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+
+	// A provider reporting the interface as referenced, as the server configuration service does for
+	// the deployment default interface.
+	suite.service.SetDependencyRegistry(resourcedependency.Initialize(
+		suite.service, referencingProvider{interfaceID: "rsi-default"}))
+
+	svcErr := suite.service.DeleteResourceServerInterface(
+		context.Background(), testResourceServerID, "rsi-default")
+
+	suite.NotNil(svcErr)
+	suite.Equal(ErrorCannotDelete.Code, svcErr.Code)
+	suite.mockStore.AssertNotCalled(suite.T(), "DeleteResourceServerInterface", mock.Anything, mock.Anything)
+}
+
+// Deleting the resource server cascades its interfaces away, so a referenced interface blocks that too.
+func (suite *ResourceServiceTestSuite) TestDeleteResourceServer_BlockedByReferencedInterface() {
+	suite.mockStore.On("IsResourceServerDeclarative", testResourceServerID).Return(false)
+	suite.mockStore.On("GetResourceServer", mock.Anything, testResourceServerID).
+		Return(providers.ResourceServer{ID: testResourceServerID}, nil)
+	suite.mockStore.On("CheckResourceServerHasDependencies", mock.Anything, testResourceServerID).
+		Return(false, nil)
+	suite.mockStore.On("ListResourceServerInterfaces", mock.Anything, testResourceServerID).
+		Return([]providers.ResourceServerInterface{
+			{ID: "rsi-default", ResourceServerID: testResourceServerID},
+		}, nil)
+
+	suite.service.SetDependencyRegistry(resourcedependency.Initialize(
+		suite.service, referencingProvider{interfaceID: "rsi-default"}))
+
+	svcErr := suite.service.DeleteResourceServer(context.Background(), testResourceServerID)
+
+	suite.NotNil(svcErr)
+	suite.Equal(ErrorCannotDelete.Code, svcErr.Code)
+	suite.mockStore.AssertNotCalled(suite.T(), "DeleteResourceServer", mock.Anything, testResourceServerID)
+}
+
+// referencingProvider reports one resource server interface as referenced, standing in for the
+// server configuration service's default-interface section.
+type referencingProvider struct {
+	interfaceID string
+}
+
+func (p referencingProvider) GetResourceDependencies(
+	_ context.Context, resourceType, id string,
+) ([]resourcedependency.ResourceDependency, error) {
+	if resourceType != resourcedependency.ResourceTypeResourceServerInterface || id != p.interfaceID {
+		return []resourcedependency.ResourceDependency{}, nil
+	}
+	return []resourcedependency.ResourceDependency{{
+		ResourceType:     resourcedependency.ResourceTypeServerConfig,
+		ID:               "defaultResourceServerInterface",
+		BehaviorOnDelete: resourcedependency.BehaviorRestrict,
+	}}, nil
 }

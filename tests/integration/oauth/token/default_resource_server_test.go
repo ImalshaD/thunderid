@@ -44,10 +44,11 @@ const (
 
 type DefaultResourceServerTestSuite struct {
 	suite.Suite
-	client           *http.Client
-	ouID             string
-	appID            string
-	resourceServerID string
+	client                    *http.Client
+	ouID                      string
+	appID                     string
+	resourceServerID          string
+	resourceServerInterfaceID string
 }
 
 func TestDefaultResourceServerTestSuite(t *testing.T) {
@@ -68,17 +69,21 @@ func (s *DefaultResourceServerTestSuite) SetupSuite() {
 	rsID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "Default Resource Server Token API",
 		Description: "Resource server for default fallback token tests",
-		Identifier:  defaultRSTestIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: defaultRSTestIdentifier},
 		OUID:        s.ouID,
 	}, []testutils.Action{})
 	s.Require().NoError(err)
 	s.resourceServerID = rsID
 
+	interfaceID, err := testutils.GetFirstResourceServerInterfaceID(rsID)
+	s.Require().NoError(err)
+	s.resourceServerInterfaceID = interfaceID
+
 	s.appID = s.createOAuthApp()
 }
 
 func (s *DefaultResourceServerTestSuite) TearDownSuite() {
-	_ = testutils.PutDefaultResourceServer("")
+	_ = testutils.PutDefaultResourceServerInterface("")
 	if s.appID != "" {
 		_ = testutils.DeleteApplication(s.appID)
 	}
@@ -154,7 +159,7 @@ func (s *DefaultResourceServerTestSuite) requestClientCredentials(scope, resourc
 }
 
 func (s *DefaultResourceServerTestSuite) TestNoResourceWithPermissionScopeUsesConfiguredDefaultResourceServer() {
-	s.Require().NoError(testutils.PutDefaultResourceServer(s.resourceServerID))
+	s.Require().NoError(testutils.PutDefaultResourceServerInterface(s.resourceServerInterfaceID))
 
 	status, body := s.requestClientCredentials("read", "")
 	s.Equal(http.StatusOK, status)
@@ -168,7 +173,7 @@ func (s *DefaultResourceServerTestSuite) TestNoResourceWithPermissionScopeUsesCo
 }
 
 func (s *DefaultResourceServerTestSuite) TestNoResourceWithoutDefaultAndNoScopesUsesClientIDAudience() {
-	s.Require().NoError(testutils.PutDefaultResourceServer(""))
+	s.Require().NoError(testutils.PutDefaultResourceServerInterface(""))
 
 	status, body := s.requestClientCredentials("", "")
 	s.Equal(http.StatusOK, status)
@@ -183,7 +188,7 @@ func (s *DefaultResourceServerTestSuite) TestNoResourceWithoutDefaultAndNoScopes
 }
 
 func (s *DefaultResourceServerTestSuite) TestNoResourceWithoutDefaultAndPermissionScopeRejects() {
-	s.Require().NoError(testutils.PutDefaultResourceServer(""))
+	s.Require().NoError(testutils.PutDefaultResourceServerInterface(""))
 
 	status, body := s.requestClientCredentials("read", "")
 	s.Equal(http.StatusBadRequest, status)
@@ -267,7 +272,7 @@ func (s *DefaultResourceServerTestSuite) requestClientCredentialsAs(
 func (s *DefaultResourceServerTestSuite) TestScopelessWithConfiguredDefaultAudienceUsesIt() {
 	appID := s.createOAuthAppWithDefaultAudience()
 	defer func() { _ = testutils.DeleteApplication(appID) }()
-	s.Require().NoError(testutils.PutDefaultResourceServer(""))
+	s.Require().NoError(testutils.PutDefaultResourceServerInterface(""))
 
 	status, body := s.requestClientCredentialsAs(defaultAudTestClientID, defaultAudTestClientSecret, "", "")
 	s.Equal(http.StatusOK, status)

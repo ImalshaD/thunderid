@@ -116,9 +116,9 @@ func (suite *AuthorizationCodeGrantHandlerTestSuite) SetupTest() {
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, mock.Anything).
 		Return(func(_ context.Context, identifier string) *providers.ResourceServer {
 			if identifier == "" {
-				return &providers.ResourceServer{ID: testDefaultRSID, Identifier: testDefaultRSIdentifier}
+				return resolvedResourceServer(testDefaultRSID, testDefaultRSIdentifier)
 			}
-			return &providers.ResourceServer{ID: identifier, Identifier: identifier}
+			return resolvedResourceServer(identifier, identifier)
 		}, func(_ context.Context, _ string) *tidcommon.ServiceError {
 			return nil
 		}).Maybe()
@@ -176,9 +176,9 @@ func (suite *AuthorizationCodeGrantHandlerTestSuite) stubDefaultResourceServer()
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, mock.Anything).
 		Return(func(_ context.Context, identifier string) *providers.ResourceServer {
 			if identifier == "" {
-				return &providers.ResourceServer{ID: testDefaultRSID, Identifier: testDefaultRSIdentifier}
+				return resolvedResourceServer(testDefaultRSID, testDefaultRSIdentifier)
 			}
-			return &providers.ResourceServer{ID: identifier, Identifier: identifier}
+			return resolvedResourceServer(identifier, identifier)
 		}, func(_ context.Context, _ string) *tidcommon.ServiceError {
 			return nil
 		}).Maybe()
@@ -1468,7 +1468,7 @@ func (suite *AuthorizationCodeGrantHandlerTestSuite) TestHandleGrant_TokenReques
 
 	suite.mockResourceService.ExpectedCalls = nil
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, testResourceURL).
-		Return(&providers.ResourceServer{ID: testResourceURL, Identifier: testResourceURL}, nil)
+		Return(resolvedResourceServer(testResourceURL, testResourceURL), nil)
 	// rs1 only supports "read"; "write" is invalid.
 	suite.mockResourceService.On("ValidatePermissions", mock.Anything, testResourceURL, mock.Anything).
 		Return([]string{"write"}, nil)
@@ -1602,7 +1602,7 @@ func (suite *AuthorizationCodeGrantHandlerTestSuite) TestHandleGrant_DownscopeVa
 
 	suite.mockResourceService.ExpectedCalls = nil
 	suite.mockResourceService.On("GetResourceServerByIdentifier", mock.Anything, testResourceURL).
-		Return(&providers.ResourceServer{ID: testResourceURL, Identifier: testResourceURL}, nil)
+		Return(resolvedResourceServer(testResourceURL, testResourceURL), nil)
 	suite.mockResourceService.On("ValidatePermissions", mock.Anything, testResourceURL, mock.Anything).
 		Return([]string(nil), &tidcommon.ServiceError{Type: tidcommon.ServerErrorType, Code: "RES-5001"})
 

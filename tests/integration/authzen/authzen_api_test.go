@@ -99,8 +99,8 @@ func (ts *AuthZENAPITestSuite) SetupSuite() {
 	resourceServer, err := createResourceServer(testutils.ResourceServer{
 		Name:        "AuthZEN Booking API",
 		Description: "Resource server for AuthZEN integration tests",
-		Identifier:  authzenResourceIdentifier,
 		OUID:        ts.ouID,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: authzenResourceIdentifier},
 	})
 	ts.Require().NoError(err, "create AuthZEN resource server")
 	ts.resourceServerID = resourceServer.ID
@@ -108,8 +108,8 @@ func (ts *AuthZENAPITestSuite) SetupSuite() {
 	otherServer, err := createResourceServer(testutils.ResourceServer{
 		Name:        "AuthZEN Invoice API",
 		Description: "Second resource server for AuthZEN integration tests",
-		Identifier:  authzenOtherResourceIdentifier,
 		OUID:        ts.ouID,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: authzenOtherResourceIdentifier},
 	})
 	ts.Require().NoError(err, "create second AuthZEN resource server")
 	ts.otherServerID = otherServer.ID

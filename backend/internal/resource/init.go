@@ -124,6 +124,41 @@ func registerRoutes(mux *http.ServeMux, handler *resourceHandler) {
 			w.WriteHeader(http.StatusNoContent)
 		}, resourceServerDetailOpts))
 
+	// Resource Server Interface routes
+	interfaceOpts := middleware.CORSOptions{
+		AllowedMethods:   []string{"GET", "POST"},
+		AllowedHeaders:   middleware.DefaultAllowedHeaders,
+		AllowCredentials: true,
+		MaxAge:           600,
+	}
+
+	mux.HandleFunc(middleware.WithCORS("GET /resource-servers/{rsId}/interfaces",
+		handler.HandleResourceServerInterfaceListRequest, interfaceOpts))
+	mux.HandleFunc(middleware.WithCORS("POST /resource-servers/{rsId}/interfaces",
+		handler.HandleResourceServerInterfacePostRequest, interfaceOpts))
+	mux.HandleFunc(middleware.WithCORS("OPTIONS /resource-servers/{rsId}/interfaces",
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}, interfaceOpts))
+
+	interfaceDetailOpts := middleware.CORSOptions{
+		AllowedMethods:   []string{"GET", "PUT", "DELETE"},
+		AllowedHeaders:   middleware.DefaultAllowedHeaders,
+		AllowCredentials: true,
+		MaxAge:           600,
+	}
+
+	mux.HandleFunc(middleware.WithCORS("GET /resource-servers/{rsId}/interfaces/{id}",
+		handler.HandleResourceServerInterfaceGetRequest, interfaceDetailOpts))
+	mux.HandleFunc(middleware.WithCORS("PUT /resource-servers/{rsId}/interfaces/{id}",
+		handler.HandleResourceServerInterfacePutRequest, interfaceDetailOpts))
+	mux.HandleFunc(middleware.WithCORS("DELETE /resource-servers/{rsId}/interfaces/{id}",
+		handler.HandleResourceServerInterfaceDeleteRequest, interfaceDetailOpts))
+	mux.HandleFunc(middleware.WithCORS("OPTIONS /resource-servers/{rsId}/interfaces/{id}",
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		}, interfaceDetailOpts))
+
 	// Resource routes
 	resourceOpts := middleware.CORSOptions{
 		AllowedMethods:   []string{"GET", "POST"},

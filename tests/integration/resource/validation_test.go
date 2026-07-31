@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -96,11 +97,12 @@ func (suite *ValidationTestSuite) TestCreateResourceServerMissingOrgUnit() {
 	suite.Contains(err.Error(), "400")
 }
 
-func (suite *ValidationTestSuite) TestCreateResourceServerMissingIdentifier() {
-	// Identifier is mandatory on create. Post a raw request without the identifier field
-	// (the createResourceServer helper auto-fills one, so it cannot exercise this path).
+func (suite *ValidationTestSuite) TestCreateResourceServerMissingInterface() {
+	// The initial interface is mandatory on create: it carries the audience identifier. Post a raw
+	// request without it (the createResourceServer helper auto-fills one, so it cannot exercise this
+	// path).
 	body, _ := json.Marshal(map[string]interface{}{
-		"name": "missing-identifier-server",
+		"name": "missing-interface-server",
 		"ouId": suite.ouID,
 	})
 
@@ -115,8 +117,9 @@ func (suite *ValidationTestSuite) TestCreateResourceServerMissingIdentifier() {
 	respBody, _ := io.ReadAll(resp.Body)
 
 	suite.Equal(http.StatusBadRequest, resp.StatusCode,
-		"creating a resource server without an identifier must be rejected. Response: %s", string(respBody))
-	suite.Contains(string(respBody), "identifier", "rejection should reference the missing identifier field")
+		"creating a resource server without an interface must be rejected. Response: %s", string(respBody))
+	suite.Contains(strings.ToLower(string(respBody)), "interface",
+		"rejection should reference the missing interface")
 }
 
 func (suite *ValidationTestSuite) TestUpdateResourceServerMissingName() {

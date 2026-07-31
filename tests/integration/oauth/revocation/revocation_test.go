@@ -76,7 +76,7 @@ func (ts *RevocationTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "Revocation Default Resource Server",
 		Description: "Resource server for revocation integration tests",
-		Identifier:  revocationDefaultResourceServerIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: revocationDefaultResourceServerIdentifier},
 		OUID:        ts.ouID,
 	}, []testutils.Action{})
 	ts.Require().NoError(err, "failed to create resource server")

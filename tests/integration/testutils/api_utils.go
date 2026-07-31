@@ -1312,7 +1312,9 @@ func GetResourceServerByIdentifier(identifier string) (string, error) {
 	var listResp struct {
 		ResourceServers []struct {
 			ID         string `json:"id"`
-			Identifier string `json:"identifier"`
+			Interfaces []struct {
+				Identifier string `json:"identifier"`
+			} `json:"interfaces"`
 		} `json:"resourceServers"`
 	}
 	if err := json.Unmarshal(body, &listResp); err != nil {
@@ -1320,12 +1322,50 @@ func GetResourceServerByIdentifier(identifier string) (string, error) {
 	}
 
 	for _, rs := range listResp.ResourceServers {
-		if rs.Identifier == identifier {
-			return rs.ID, nil
+		for _, rsi := range rs.Interfaces {
+			if rsi.Identifier == identifier {
+				return rs.ID, nil
+			}
 		}
 	}
 
-	return "", fmt.Errorf("resource server with identifier %q not found", identifier)
+	return "", fmt.Errorf("resource server owning interface identifier %q not found", identifier)
+}
+
+// GetFirstResourceServerInterfaceID returns the ID of the first interface a resource server exposes.
+// Tests that configure the deployment default need the interface ID, not the resource server ID.
+func GetFirstResourceServerInterfaceID(resourceServerID string) (string, error) {
+	client := GetHTTPClient()
+
+	req, err := http.NewRequest("GET", TestServerURL+"/resource-servers/"+resourceServerID+"/interfaces", nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to build list-interfaces request: %w", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to list resource server interfaces: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("list resource server interfaces returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var listResp struct {
+		Interfaces []struct {
+			ID string `json:"id"`
+		} `json:"interfaces"`
+	}
+	if err := json.Unmarshal(body, &listResp); err != nil {
+		return "", fmt.Errorf("failed to unmarshal resource server interfaces response: %w", err)
+	}
+	if len(listResp.Interfaces) == 0 {
+		return "", fmt.Errorf("resource server %q exposes no interfaces", resourceServerID)
+	}
+
+	return listResp.Interfaces[0].ID, nil
 }
 
 // GetResourceServerByName lists all resource servers and returns the ID of
@@ -1390,25 +1430,28 @@ func DeleteResourceServer(rsID string) error {
 	return nil
 }
 
-func PutDefaultResourceServer(resourceServerID string) error {
+// PutDefaultResourceServerInterface points the deployment default at the given interface, or clears
+// it when the ID is empty.
+func PutDefaultResourceServerInterface(resourceServerInterfaceID string) error {
 	client := GetHTTPClient()
 
 	payload, err := json.Marshal(map[string]string{
-		"resourceServerId": resourceServerID,
+		"resourceServerInterfaceId": resourceServerInterfaceID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal default resource server config: %w", err)
+		return fmt.Errorf("failed to marshal default resource server interface config: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPut, TestServerURL+"/server-config/defaultResourceServer", bytes.NewReader(payload))
+	req, err := http.NewRequest(http.MethodPut,
+		TestServerURL+"/server-config/defaultResourceServerInterface", bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("failed to create default resource server config request: %w", err)
+		return fmt.Errorf("failed to create default resource server interface config request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to update default resource server config: %w", err)
+		return fmt.Errorf("failed to update default resource server interface config: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -1542,9 +1585,9 @@ func createActionUnderResource(resourceServerID, resourceID string, action Actio
 // DeleteResourceServer during teardown.
 func CreateSystemScopedResourceServer(ouID, name, identifier string, childHandles ...string) (string, error) {
 	rsID, err := createResourceServer(ResourceServer{
-		Name:       name,
-		Identifier: identifier,
-		OUID:       ouID,
+		Name:      name,
+		OUID:      ouID,
+		Interface: ResourceServerInterface{Type: "API", Identifier: identifier},
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create resource server: %w", err)

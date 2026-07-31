@@ -250,7 +250,7 @@ func (ts *FlowAuthzTestSuite) SetupSuite() {
 	resourceServer := testutils.ResourceServer{
 		Name:        "Document Management System",
 		Description: "System for managing documents",
-		Identifier:  "document-mgmt",
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: "document-mgmt"},
 		OUID:        authzTestOUID,
 	}
 	actions := []testutils.Action{

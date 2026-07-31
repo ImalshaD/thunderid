@@ -40,8 +40,8 @@ const {default: useGetDefaultResourceServer} = await import('../useGetDefaultRes
 describe('useGetDefaultResourceServer', () => {
   const mockResponse: DefaultResourceServerConfigResponse = {
     readOnly: {},
-    writable: {resourceServerId: 'rs-1'},
-    merged: {resourceServerId: 'rs-1'},
+    writable: {resourceServerInterfaceId: 'rs-1'},
+    merged: {resourceServerInterfaceId: 'rs-1'},
   };
 
   beforeEach(() => {
@@ -62,7 +62,7 @@ describe('useGetDefaultResourceServer', () => {
 
     expect(mockHttpRequest).toHaveBeenCalledWith(
       expect.objectContaining({
-        url: 'https://localhost:8090/server-config/defaultResourceServer',
+        url: 'https://localhost:8090/server-config/defaultResourceServerInterface',
         method: 'GET',
       }),
     );

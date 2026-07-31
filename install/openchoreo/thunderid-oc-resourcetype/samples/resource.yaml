@@ -81,8 +81,8 @@ spec:
         value: CONSOLE
       - name: CONSOLE_REDIRECT_URIS_0
         value: "<SERVER_PUBLIC_URL>/console"
-      # Resolves the System resource_server identifier below. Keep equal to the
-      # binding's serverPublicUrl so the Console's resource_identifier matches.
+      # Resolves the System resource_server interface identifiers below. Keep equal to
+      # the binding's serverPublicUrl so the Console's resource_identifier matches.
       - name: SERVER_PUBLIC_URL
         value: "<SERVER_PUBLIC_URL>"
 
@@ -1478,8 +1478,13 @@ spec:
       name: System
       description: System resource server
       handle: ""
-      identifier: {{.SERVER_PUBLIC_URL}}/mcp
-      type: CUSTOM
+      interfaces:
+        - id: 01900000-0000-7000-8000-000000000022
+          type: API
+          identifier: {{.SERVER_PUBLIC_URL}}
+        - id: 01900000-0000-7000-8000-000000000021
+          type: MCP
+          identifier: {{.SERVER_PUBLIC_URL}}/mcp
       ouId: 01900000-0000-7000-8000-000000000001
       delimiter: ":"
       resources:

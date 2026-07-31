@@ -22,7 +22,8 @@ import {useThunderID} from '@thunderid/react';
 import ResourceServerQueryKeys from '../constants/resource-server-query-keys';
 import type {DefaultResourceServerConfigResponse, DefaultResourceServerValue} from '../models/resource-server';
 
-// Updates the writable layer of the default resource server server-config section.
+// Updates the writable layer of the default resource server interface server-config section. An empty
+// interface ID clears the default.
 export default function useSetDefaultResourceServer(): UseMutationResult<
   DefaultResourceServerConfigResponse,
   Error,
@@ -37,7 +38,7 @@ export default function useSetDefaultResourceServer(): UseMutationResult<
       const serverUrl = getServerUrl();
 
       const response: {data: DefaultResourceServerConfigResponse} = await http.request({
-        url: `${serverUrl}/server-config/${ResourceServerQueryKeys.DEFAULT_RESOURCE_SERVER}`,
+        url: `${serverUrl}/server-config/${ResourceServerQueryKeys.DEFAULT_RESOURCE_SERVER_INTERFACE}`,
         method: 'PUT',
         data,
       } as unknown as Parameters<typeof http.request>[0]);
@@ -47,7 +48,7 @@ export default function useSetDefaultResourceServer(): UseMutationResult<
     onSuccess: (data) => {
       // PUT returns the recomputed layers, so keep the read model in sync without a refetch.
       queryClient.setQueryData(
-        [ResourceServerQueryKeys.SERVER_CONFIG, ResourceServerQueryKeys.DEFAULT_RESOURCE_SERVER],
+        [ResourceServerQueryKeys.SERVER_CONFIG, ResourceServerQueryKeys.DEFAULT_RESOURCE_SERVER_INTERFACE],
         data,
       );
     },

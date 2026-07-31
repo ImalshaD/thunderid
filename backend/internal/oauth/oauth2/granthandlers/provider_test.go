@@ -195,3 +195,13 @@ func (suite *GrantHandlerProviderTestSuite) TestGetGrantHandler_AllSupportedType
 		})
 	}
 }
+
+func resolvedResourceServer(id, identifier string) *providers.ResourceServer {
+	return &providers.ResourceServer{
+		ID: id,
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: identifier,
+		}},
+	}
+}

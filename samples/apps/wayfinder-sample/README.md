@@ -238,7 +238,7 @@ The only placeholder you must replace is in `ai-agent/.env`:
 
 The agent secret defaults to `wayfinder-agent-secret` (matching `thunderid.env`). Everything else in the examples is local development defaults that match the run instructions below.
 
-The imported ThunderID bundle configures `defaultResourceServer` to `wayfinder-booking-rs`. That lets the Wayfinder web app obtain its normal sign-in token without sending a `resource` parameter; the resulting access token is bound to the booking API audience (`http://localhost:8787/mcp`) and can carry `booking:*` permissions. The chat widget obtains a separate token with `resource=http://localhost:8790/chat` so `agent:access` is bound to the chat API audience. Tokens used by the AI agent to call the Wayfinder MCP server also send `resource=http://localhost:8787/mcp` explicitly.
+The imported ThunderID bundle configures `defaultResourceServerInterface` to `wayfinder-booking-rs`. That lets the Wayfinder web app obtain its normal sign-in token without sending a `resource` parameter; the resulting access token is bound to the booking API audience (`http://localhost:8787/mcp`) and can carry `booking:*` permissions. The chat widget obtains a separate token with `resource=http://localhost:8790/chat` so `agent:access` is bound to the chat API audience. Tokens used by the AI agent to call the Wayfinder MCP server also send `resource=http://localhost:8787/mcp` explicitly.
 
 ### MCP Tool Authorization
 

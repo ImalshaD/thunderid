@@ -289,7 +289,7 @@ func (h *tokenExchangeGrantHandler) HandleGrant(ctx context.Context, tokenReques
 		finalScopes = append(finalScopes, oidcScopes...)
 		finalScopes = append(finalScopes, permissionScopes...)
 
-		finalAudiences = []string{targetRS.Identifier}
+		finalAudiences = []string{resourceindicators.SelectedAudience(targetRS)}
 	}
 
 	// Resolve how the exchanged token relates to the subject token's revocation family: inherit joins

@@ -145,11 +145,17 @@ type groupAdapter interface {
 }
 
 type resourceServerAdapter interface {
-	CreateResourceServer(ctx context.Context, rs providers.ResourceServer) (*providers.ResourceServer,
-		*tidcommon.ServiceError)
+	CreateResourceServer(ctx context.Context, rs providers.ResourceServer) (
+		*providers.ResourceServer, *tidcommon.ServiceError)
 	GetResourceServer(ctx context.Context, id string) (*providers.ResourceServer, *tidcommon.ServiceError)
 	UpdateResourceServer(ctx context.Context, id string, rs providers.ResourceServer) (*providers.ResourceServer,
 		*tidcommon.ServiceError)
+	CreateResourceServerInterface(ctx context.Context, resourceServerID string,
+		rsi providers.ResourceServerInterface) (*providers.ResourceServerInterface, *tidcommon.ServiceError)
+	GetResourceServerInterfaceList(ctx context.Context, resourceServerID string) (
+		[]providers.ResourceServerInterface, *tidcommon.ServiceError)
+	UpdateResourceServerInterface(ctx context.Context, resourceServerID, interfaceID string,
+		rsi providers.ResourceServerInterface) (*providers.ResourceServerInterface, *tidcommon.ServiceError)
 	CreateResource(ctx context.Context, resourceServerID string, res providers.Resource) (
 		*providers.Resource, *tidcommon.ServiceError)
 	GetResourceList(ctx context.Context, resourceServerID string, parentID *string, limit, offset int) (

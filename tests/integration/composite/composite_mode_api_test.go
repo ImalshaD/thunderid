@@ -579,9 +579,12 @@ func (suite *CompositeModeSuite) TestResourceServerCreate() {
 	rsID := fmt.Sprintf("runtime-rs-%d", timestamp)
 
 	rs := map[string]interface{}{
-		"name":       "Test Runtime Resource Server",
-		"ouId":       "decl-ou-1",
-		"identifier": rsID,
+		"name": "Test Runtime Resource Server",
+		"ouId": "decl-ou-1",
+		"interface": map[string]interface{}{
+			"type":       "API",
+			"identifier": rsID,
+		},
 		"resources": []map[string]interface{}{
 			{
 				"name":   "Test Resource",

@@ -142,29 +142,11 @@ func (f *fileBasedResourceStore) CheckResourceServerNameExists(ctx context.Conte
 	return true, nil
 }
 
-func (f *fileBasedResourceStore) CheckResourceServerIdentifierExists(
-	ctx context.Context, identifier string) (bool, error) {
-	_, err := f.GenericFileBasedStore.GetByField(identifier, func(d interface{}) string {
-		return d.(*providers.ResourceServer).Identifier
-	})
-	if err != nil {
-		return false, nil
-	}
-	return true, nil
-}
-
 func (f *fileBasedResourceStore) GetResourceServerByIdentifier(
 	ctx context.Context, identifier string) (providers.ResourceServer, error) {
-	data, err := f.GenericFileBasedStore.GetByField(identifier, func(d interface{}) string {
-		return d.(*providers.ResourceServer).Identifier
-	})
+	rs, _, err := f.findByInterfaceIdentifier(identifier)
 	if err != nil {
-		return providers.ResourceServer{}, errResourceServerNotFound
-	}
-
-	rs, ok := data.(*providers.ResourceServer)
-	if !ok {
-		return providers.ResourceServer{}, errors.New("data corrupted")
+		return providers.ResourceServer{}, err
 	}
 
 	return *rs, nil
@@ -192,6 +174,127 @@ func (f *fileBasedResourceStore) IsResourceServerDeclarative(id string) bool {
 	// Check if the resource server actually exists in the file store
 	_, err := f.GenericFileBasedStore.Get(id)
 	return err == nil
+}
+
+// Resource Server Interface operations
+
+func (f *fileBasedResourceStore) CreateResourceServerInterface(
+	ctx context.Context, rsi providers.ResourceServerInterface,
+) error {
+	return errImmutableStore
+}
+
+func (f *fileBasedResourceStore) GetResourceServerInterface(
+	ctx context.Context, interfaceID string,
+) (providers.ResourceServerInterface, error) {
+	servers, err := f.listResourceServers()
+	if err != nil {
+		return providers.ResourceServerInterface{}, err
+	}
+
+	for _, rs := range servers {
+		for _, rsi := range rs.Interfaces {
+			if rsi.ID == interfaceID {
+				return declarativeInterface(rsi, rs.ID), nil
+			}
+		}
+	}
+	return providers.ResourceServerInterface{}, errResourceServerInterfaceNotFound
+}
+
+func (f *fileBasedResourceStore) GetResourceServerInterfaceByIdentifier(
+	ctx context.Context, identifier string,
+) (providers.ResourceServerInterface, error) {
+	rs, rsi, err := f.findByInterfaceIdentifier(identifier)
+	if err != nil {
+		return providers.ResourceServerInterface{}, errResourceServerInterfaceNotFound
+	}
+	return declarativeInterface(*rsi, rs.ID), nil
+}
+
+func (f *fileBasedResourceStore) ListResourceServerInterfaces(
+	ctx context.Context, resourceServerID string,
+) ([]providers.ResourceServerInterface, error) {
+	data, err := f.GenericFileBasedStore.Get(resourceServerID)
+	if err != nil {
+		return nil, errResourceServerNotFound
+	}
+
+	rs, ok := data.(*providers.ResourceServer)
+	if !ok {
+		declarativeresource.LogTypeAssertionError("resource_server", resourceServerID)
+		return nil, errors.New("data corrupted")
+	}
+
+	interfaces := make([]providers.ResourceServerInterface, 0, len(rs.Interfaces))
+	for _, rsi := range rs.Interfaces {
+		interfaces = append(interfaces, declarativeInterface(rsi, rs.ID))
+	}
+	return interfaces, nil
+}
+
+func (f *fileBasedResourceStore) UpdateResourceServerInterface(
+	ctx context.Context, rsi providers.ResourceServerInterface,
+) error {
+	return errImmutableStore
+}
+
+func (f *fileBasedResourceStore) DeleteResourceServerInterface(ctx context.Context, interfaceID string) error {
+	return errImmutableStore
+}
+
+func (f *fileBasedResourceStore) CheckResourceServerInterfaceIdentifierExists(
+	ctx context.Context, identifier string,
+) (bool, error) {
+	if _, _, err := f.findByInterfaceIdentifier(identifier); err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+// listResourceServers returns every resource server held in the file store.
+func (f *fileBasedResourceStore) listResourceServers() ([]*providers.ResourceServer, error) {
+	list, err := f.GenericFileBasedStore.List()
+	if err != nil {
+		return nil, err
+	}
+
+	servers := make([]*providers.ResourceServer, 0, len(list))
+	for _, item := range list {
+		if rs, ok := item.Data.(*providers.ResourceServer); ok {
+			servers = append(servers, rs)
+		}
+	}
+	return servers, nil
+}
+
+// findByInterfaceIdentifier resolves the resource server and interface owning an identifier.
+func (f *fileBasedResourceStore) findByInterfaceIdentifier(
+	identifier string,
+) (*providers.ResourceServer, *providers.ResourceServerInterface, error) {
+	servers, err := f.listResourceServers()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	for _, rs := range servers {
+		for i := range rs.Interfaces {
+			if rs.Interfaces[i].Identifier == identifier {
+				return rs, &rs.Interfaces[i], nil
+			}
+		}
+	}
+	return nil, nil, errResourceServerNotFound
+}
+
+// declarativeInterface stamps a declarative interface as read-only and binds it to its owner.
+func declarativeInterface(
+	rsi providers.ResourceServerInterface,
+	resourceServerID string,
+) providers.ResourceServerInterface {
+	rsi.ResourceServerID = resourceServerID
+	rsi.IsReadOnly = true
+	return rsi
 }
 
 // Resource operations

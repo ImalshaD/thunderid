@@ -104,7 +104,7 @@ Use `resource` (RFC 8707) for the resource server URI:
   -d 'resource=https://api.example.com/invoices'
 ```
 
-The RFC 8693 `audience` parameter is accepted for compatibility but does not determine the access token's `aud` claim. For permission-bearing requests, the access-token audience is the resolved `resource`, or the configured `defaultResourceServer` when `resource` is omitted. An OIDC-only or scopeless request without `resource` uses the agent's default audience (`token.accessToken.defaultAudience`), or the `client_id` when it is unset.
+The RFC 8693 `audience` parameter is accepted for compatibility but does not determine the access token's `aud` claim. For permission-bearing requests, the access-token audience is the resolved resource server interface identifier, or the identifier of the configured default resource server interface when `resource` is omitted. An OIDC-only or scopeless request without `resource` uses the agent's default audience (`token.accessToken.defaultAudience`), or the `client_id` when it is unset.
 
 ## Token Characteristics
 
@@ -114,7 +114,7 @@ All agent access tokens are signed JWTs (`typ: at+jwt`) and share a common set o
 |---|---|---|
 | `sub` | The agent's resource ID. | The original user's subject identifier. |
 | `iss` | <ProductName /> instance URL. | <ProductName /> instance URL. |
-| `aud` | The resolved resource server identifier, or the default audience (falling back to Client ID) for a scopeless request without `resource`. | The resolved resource server identifier, or the default audience (falling back to Client ID) when no permission scopes or `resource` are present. |
+| `aud` | The resolved resource server interface identifier, or the default audience (falling back to Client ID) for a scopeless request without `resource`. | The resolved resource server interface identifier, or the default audience (falling back to Client ID) when no permission scopes or `resource` are present. |
 | `scope` | Authorized scopes from the agent's group/role assignments. | A subset of the user's original scopes. |
 | `client_id` | The agent's Client ID. | The agent's Client ID. |
 | `grant_type` | `client_credentials` | `urn:ietf:params:oauth:grant-type:token-exchange` |
@@ -151,7 +151,7 @@ Your resource server should validate:
 |---|---|
 | `exp` | Token has not expired. |
 | `iss` | Matches your <ProductName /> instance URL. |
-| `aud` | Matches your resource server identifier. |
+| `aud` | Matches the identifier of your resource server interface. |
 | `scope` | Includes the scope required for the operation. |
 
 Use the <ProductName /> JWKS endpoint to retrieve public keys for signature verification:

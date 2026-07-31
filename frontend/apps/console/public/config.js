@@ -31,7 +31,7 @@ window.__THUNDERID_RUNTIME_CONFIG__ = {
   client: {
     base: '/console',
     client_id: 'CONSOLE',
-    resource_identifier: 'https://localhost:8090/mcp',
+    resource_identifier: 'https://localhost:8090',
     scopes: ['openid', 'profile', 'email', 'ou', 'system'],
   },
   // Defaults to the origin this app is served from. Add a `server` block with `public_url`

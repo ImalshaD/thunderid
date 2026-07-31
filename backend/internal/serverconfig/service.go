@@ -24,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/thunder-id/thunderid/internal/system/log"
+	"github.com/thunder-id/thunderid/internal/system/resourcedependency"
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/common"
 )
 
@@ -37,6 +38,11 @@ type ServerConfigService interface {
 	GetWritableConfig(ctx context.Context, name string) (any, *common.ServiceError)
 	GetMergedConfig(ctx context.Context, name string) (any, *common.ServiceError)
 	SetConfig(ctx context.Context, name ConfigName, value json.RawMessage) *common.ServiceError
+	// GetResourceDependencies implements resourcedependency.Provider so that a resource referenced by
+	// a configuration section cannot be deleted out from under it.
+	GetResourceDependencies(
+		ctx context.Context, resourceType, id string,
+	) ([]resourcedependency.ResourceDependency, error)
 }
 
 // serverConfigService is the default implementation of ServerConfigService.

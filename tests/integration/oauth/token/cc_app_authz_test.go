@@ -71,7 +71,7 @@ func (s *CCAppAuthzTestSuite) SetupSuite() {
 	rsID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "CC Authz API",
 		Description: "Resource server for CC authz testing",
-		Identifier:  ccAuthzResourceServerIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: ccAuthzResourceServerIdentifier},
 		OUID:        s.ouID,
 	}, []testutils.Action{
 		{Name: "Read", Handle: "read", Description: "Read access"},
@@ -85,7 +85,7 @@ func (s *CCAppAuthzTestSuite) SetupSuite() {
 	secondaryRSID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "CC Authz Secondary API",
 		Description: "Secondary resource server for CC authz testing",
-		Identifier:  ccAuthzSecondaryRSIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: ccAuthzSecondaryRSIdentifier},
 		OUID:        s.ouID,
 	}, []testutils.Action{
 		{Name: "Read", Handle: "read", Description: "Read access"},

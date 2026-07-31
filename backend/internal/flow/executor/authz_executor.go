@@ -164,12 +164,14 @@ func (a *authorizationExecutor) Execute(ctx *providers.NodeContext) (*providers.
 }
 
 // resolveResourceServerID determines the internal ID of the single resource server that permission
-// scopes are evaluated against. The binding is communicated as a resource server identifier: the OAuth
-// layer seeds it in runtime data, and a direct /flow/execute request (which does not go through the
-// authorization endpoint) may supply it as an input. The identifier is resolved to its internal ID
-// through the provider; an empty identifier asks a default-aware provider to resolve the deployment's
-// configured default resource server. Returns "" when none can be resolved (unknown identifier, no
-// default configured, or no resource provider available, for example the embedded engine).
+// scopes are evaluated against. The binding is communicated as an interface identifier: the OAuth
+// layer seeds the selected interface in runtime data, and a direct /flow/execute request (which does
+// not go through the authorization endpoint) may supply one as an input. The identifier resolves to
+// the owning resource server through the provider; an empty identifier asks a default-aware provider
+// to resolve the deployment's configured default interface. Permissions are evaluated against the
+// resource server, so which of its interfaces was selected does not change the outcome here.
+// Returns "" when none can be resolved (unknown identifier, no default configured, or no resource
+// provider available, for example the embedded engine).
 func (a *authorizationExecutor) resolveResourceServerID(ctx *providers.NodeContext) string {
 	identifier := ctx.RuntimeData[common.RuntimeKeyResourceServerIdentifier]
 	if identifier == "" {

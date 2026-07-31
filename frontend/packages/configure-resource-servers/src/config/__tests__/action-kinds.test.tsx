@@ -18,7 +18,6 @@
 
 import {render} from '@testing-library/react';
 import {describe, it, expect} from 'vitest';
-import {getActionKindIcon} from '../get-action-kind-icon';
 import {getActionKindLabel} from '../get-action-kind-label';
 import {getNamespaceIcon} from '../get-namespace-icon';
 
@@ -35,28 +34,6 @@ describe('getActionKindLabel', () => {
 
   it('should return "Namespace" for undefined kind', () => {
     expect(getActionKindLabel(undefined, t)).toBe('Namespace');
-  });
-});
-
-describe('getActionKindIcon', () => {
-  it('should render an svg icon for kind tool', () => {
-    const {container} = render(getActionKindIcon('tool'));
-    expect(container.querySelector('svg')).not.toBeNull();
-  });
-
-  it('should render an svg icon for kind resource', () => {
-    const {container} = render(getActionKindIcon('resource'));
-    expect(container.querySelector('svg')).not.toBeNull();
-  });
-
-  it('should render an svg icon for undefined kind (namespace)', () => {
-    const {container} = render(getActionKindIcon(undefined));
-    expect(container.querySelector('svg')).not.toBeNull();
-  });
-
-  it('should render an svg icon when a custom size is provided', () => {
-    const {container} = render(getActionKindIcon('tool', 24));
-    expect(container.querySelector('svg')).not.toBeNull();
   });
 });
 

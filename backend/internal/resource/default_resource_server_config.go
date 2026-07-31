@@ -21,65 +21,88 @@ package resource
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/thunder-id/thunderid/internal/serverconfig"
+	"github.com/thunder-id/thunderid/internal/system/resourcedependency"
 )
 
-// DefaultResourceServerConfig contains the default resource server configuration.
-type DefaultResourceServerConfig struct {
-	ResourceServerID string `json:"resourceServerId" yaml:"resourceServerId"`
+// DefaultResourceServerInterfaceConfig contains the default resource server interface configuration.
+// Its owning resource server is the effective default resource server.
+type DefaultResourceServerInterfaceConfig struct {
+	ResourceServerInterfaceID string `json:"resourceServerInterfaceId" yaml:"resourceServerInterfaceId"`
 }
 
-// DefaultResourceServerConfigHandler handles default resource server configuration.
-type DefaultResourceServerConfigHandler struct {
+// DefaultResourceServerInterfaceConfigHandler handles default resource server interface configuration.
+type DefaultResourceServerInterfaceConfigHandler struct {
 	resourceService ResourceServiceInterface
 }
 
-// NewDefaultResourceServerConfigHandler creates a default resource server configuration handler.
-func NewDefaultResourceServerConfigHandler(
+// NewDefaultResourceServerInterfaceConfigHandler creates a default resource server interface
+// configuration handler.
+func NewDefaultResourceServerInterfaceConfigHandler(
 	resourceService ResourceServiceInterface,
-) *DefaultResourceServerConfigHandler {
+) *DefaultResourceServerInterfaceConfigHandler {
 	if resourceService == nil {
-		panic("default resource server config handler requires a non-nil resource service")
+		panic("default resource server interface config handler requires a non-nil resource service")
 	}
-	return &DefaultResourceServerConfigHandler{resourceService: resourceService}
+	return &DefaultResourceServerInterfaceConfigHandler{resourceService: resourceService}
 }
 
-// Decode parses a default resource server configuration.
-func (*DefaultResourceServerConfigHandler) Decode(raw json.RawMessage) (any, error) {
+// Decode parses a default resource server interface configuration.
+func (*DefaultResourceServerInterfaceConfigHandler) Decode(raw json.RawMessage) (any, error) {
 	if len(raw) == 0 {
-		return DefaultResourceServerConfig{}, nil
+		return DefaultResourceServerInterfaceConfig{}, nil
 	}
-	var cfg DefaultResourceServerConfig
+	var cfg DefaultResourceServerInterfaceConfig
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		return nil, err
 	}
 	return cfg, nil
 }
 
-// Validate validates a default resource server configuration.
-func (h *DefaultResourceServerConfigHandler) Validate(incoming, readOnly, _ any) error {
-	cfg, _ := incoming.(DefaultResourceServerConfig)
-	if ro, ok := readOnly.(DefaultResourceServerConfig); ok && ro.ResourceServerID != "" {
+// Validate validates a default resource server interface configuration.
+func (h *DefaultResourceServerInterfaceConfigHandler) Validate(incoming, readOnly, _ any) error {
+	cfg, _ := incoming.(DefaultResourceServerInterfaceConfig)
+	if ro, ok := readOnly.(DefaultResourceServerInterfaceConfig); ok && ro.ResourceServerInterfaceID != "" {
 		return errDeclarativeDefaultLocked
 	}
-	if cfg.ResourceServerID == "" {
+	if cfg.ResourceServerInterfaceID == "" {
 		return nil
 	}
-	if _, svcErr := h.resourceService.GetResourceServer(context.Background(), cfg.ResourceServerID); svcErr != nil {
-		if svcErr.Code == ErrorResourceServerNotFound.Code {
-			return errUnknownDefaultResourceServer
+	_, svcErr := h.resourceService.GetResourceServerInterfaceByID(
+		context.Background(), cfg.ResourceServerInterfaceID)
+	if svcErr != nil {
+		if svcErr.Code == ErrorResourceServerInterfaceNotFound.Code {
+			return errUnknownDefaultResourceServerInterface
 		}
 		return errDefaultResourceServerLookupFailed
 	}
 	return nil
 }
 
-// Merge combines read-only and writable default resource server configurations.
-func (*DefaultResourceServerConfigHandler) Merge(readOnly, writable any) any {
-	if ro, ok := readOnly.(DefaultResourceServerConfig); ok && ro.ResourceServerID != "" {
+// ReferencedResources implements serverconfig.ReferenceReporter: the section points at one resource
+// server interface, so deleting that interface (or the resource server that owns it) is blocked while
+// it is the deployment default.
+func (*DefaultResourceServerInterfaceConfigHandler) ReferencedResources(
+	merged any,
+) []serverconfig.ConfigReference {
+	cfg, ok := merged.(DefaultResourceServerInterfaceConfig)
+	if !ok || cfg.ResourceServerInterfaceID == "" {
+		return nil
+	}
+	return []serverconfig.ConfigReference{{
+		ResourceType: resourcedependency.ResourceTypeResourceServerInterface,
+		ID:           cfg.ResourceServerInterfaceID,
+	}}
+}
+
+// Merge combines read-only and writable default resource server interface configurations.
+func (*DefaultResourceServerInterfaceConfigHandler) Merge(readOnly, writable any) any {
+	if ro, ok := readOnly.(DefaultResourceServerInterfaceConfig); ok && ro.ResourceServerInterfaceID != "" {
 		return ro
 	}
-	if w, ok := writable.(DefaultResourceServerConfig); ok {
+	if w, ok := writable.(DefaultResourceServerInterfaceConfig); ok {
 		return w
 	}
-	return DefaultResourceServerConfig{}
+	return DefaultResourceServerInterfaceConfig{}
 }

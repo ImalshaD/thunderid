@@ -118,28 +118,25 @@ type OrganizationUnitBasic struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
-// ResourceServerType represents the type of a resource server.
-type ResourceServerType string
+// ResourceServerInterfaceType represents the type of a resource server interface.
+type ResourceServerInterfaceType string
 
 const (
-	// ResourceServerTypeAPI represents an API resource server.
-	ResourceServerTypeAPI ResourceServerType = "API"
-	// ResourceServerTypeMCP represents an MCP resource server.
-	ResourceServerTypeMCP ResourceServerType = "MCP"
-	// ResourceServerTypeCustom represents a custom resource server.
-	ResourceServerTypeCustom ResourceServerType = "CUSTOM"
+	// ResourceServerInterfaceTypeAPI represents an API interface.
+	ResourceServerInterfaceTypeAPI ResourceServerInterfaceType = "API"
+	// ResourceServerInterfaceTypeMCP represents an MCP interface.
+	ResourceServerInterfaceTypeMCP ResourceServerInterfaceType = "MCP"
 )
 
-// supportedResourceServerTypes lists all the supported resource server types.
-var supportedResourceServerTypes = []ResourceServerType{
-	ResourceServerTypeAPI,
-	ResourceServerTypeMCP,
-	ResourceServerTypeCustom,
+// supportedResourceServerInterfaceTypes lists all the supported resource server interface types.
+var supportedResourceServerInterfaceTypes = []ResourceServerInterfaceType{
+	ResourceServerInterfaceTypeAPI,
+	ResourceServerInterfaceTypeMCP,
 }
 
-// IsValid reports whether the resource server type is one of the supported values.
-func (t ResourceServerType) IsValid() bool {
-	for _, supported := range supportedResourceServerTypes {
+// IsValid reports whether the resource server interface type is one of the supported values.
+func (t ResourceServerInterfaceType) IsValid() bool {
+	for _, supported := range supportedResourceServerInterfaceTypes {
 		if t == supported {
 			return true
 		}
@@ -202,18 +199,27 @@ type Resource struct {
 	Actions      []Action `yaml:"actions,omitempty"     json:"actions,omitempty"`
 }
 
+// ResourceServerInterface represents a way to access a resource server. Its identifier is the
+// audience of access tokens issued for that interface, and is unique within a deployment.
+type ResourceServerInterface struct {
+	ID               string                      `yaml:"id"         json:"id"`
+	ResourceServerID string                      `yaml:"-"          json:"-"`
+	Type             ResourceServerInterfaceType `yaml:"type"       json:"type"`
+	Identifier       string                      `yaml:"identifier" json:"identifier"`
+	IsReadOnly       bool                        `yaml:"-"          json:"-"`
+}
+
 // ResourceServer represents a resource server in both declarative resources and service layer.
 type ResourceServer struct {
-	ID          string             `yaml:"id"                    json:"-"`
-	Name        string             `yaml:"name"                  json:"name"`
-	Description string             `yaml:"description,omitempty" json:"description,omitempty"`
-	Identifier  string             `yaml:"identifier"            json:"identifier"`
-	Type        ResourceServerType `yaml:"type,omitempty"        json:"type,omitempty"`
-	OUID        string             `yaml:"ouId,omitempty"        json:"ouId"`
-	OUHandle    string             `yaml:"ouHandle,omitempty"    json:"-"`
-	Delimiter   string             `yaml:"delimiter,omitempty"   json:"delimiter,omitempty"   yamlfmt:"quoted"`
-	IsReadOnly  bool               `yaml:"-"                     json:"-"`
-	Resources   []Resource         `yaml:"resources,omitempty"   json:"resources,omitempty"`
+	ID          string                    `yaml:"id"                    json:"-"`
+	Name        string                    `yaml:"name"                  json:"name"`
+	Description string                    `yaml:"description,omitempty" json:"description,omitempty"`
+	OUID        string                    `yaml:"ouId,omitempty"        json:"ouId"`
+	OUHandle    string                    `yaml:"ouHandle,omitempty"    json:"-"`
+	Delimiter   string                    `yaml:"delimiter,omitempty"   json:"delimiter,omitempty"   yamlfmt:"quoted"`
+	IsReadOnly  bool                      `yaml:"-"                     json:"-"`
+	Interfaces  []ResourceServerInterface `yaml:"interfaces,omitempty"  json:"interfaces,omitempty"`
+	Resources   []Resource                `yaml:"resources,omitempty"   json:"resources,omitempty"`
 }
 
 // CompleteFlowDefinition represents a complete flow definition with all details.

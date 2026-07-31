@@ -38,7 +38,8 @@ import useGetResources from '../../api/useGetResources';
 import useGetResourceServers from '../../api/useGetResourceServers';
 import useGetServerActions from '../../api/useGetServerActions';
 import useSubtreePermissions from '../../api/useSubtreePermissions';
-import type {Resource, ResourcePermissions, ResourceServer} from '../../models/resource-server';
+import type {Resource, ResourcePermissions, ResourceServer, ResourceServerType} from '../../models/resource-server';
+import deriveResourceServerType from '../../utils/deriveResourceServerType';
 import {
   getSubtreeSelectionState,
   isPermissionSelected,
@@ -308,7 +309,7 @@ function DefaultServerSectionContent({
 }
 
 const SERVER_SECTION_CONTENT_BY_TYPE: Record<
-  ResourceServer['type'],
+  ResourceServerType,
   (props: ServerSectionContentProps) => JSX.Element
 > = {
   API: DefaultServerSectionContent,
@@ -317,7 +318,7 @@ const SERVER_SECTION_CONTENT_BY_TYPE: Record<
 };
 
 function ServerSectionContent(props: ServerSectionContentProps): JSX.Element {
-  const Content = SERVER_SECTION_CONTENT_BY_TYPE[props.server.type];
+  const Content = SERVER_SECTION_CONTENT_BY_TYPE[deriveResourceServerType(props.server.interfaces)];
   return <Content {...props} />;
 }
 

@@ -16,7 +16,7 @@ Access tokens are JWTs that a client presents to a resource server to access pro
 | Claim | Description |
 |-------|-------------|
 | `sub` | The subject, the user ID or client ID the token represents. |
-| `aud` | The audience: one resource server identifier, or the application's default audience (`token.accessToken.defaultAudience`, falling back to `client_id`) for an unbound OIDC-only or scopeless token. |
+| `aud` | The audience: one resource server interface identifier, or the application's default audience (`token.accessToken.defaultAudience`, falling back to `client_id`) for an unbound OIDC-only or scopeless token. |
 | `scope` | The granted scopes, the permissions the token carries. |
 | `iss` | The issuer, the <ProductName /> instance that issued the token. |
 | `exp` | The expiry time as a Unix timestamp. |
@@ -25,12 +25,12 @@ Access tokens are JWTs that a client presents to a resource server to access pro
 
 The `aud` claim varies based on whether the client used [resource indicators](../../guides/protocols/oauth-oidc/resource-indicators):
 
-- **With `resource` parameter:** The `aud` claim contains the identifier of the targeted resource server.
-- **Without `resource`, with permission scopes:** <ProductName /> uses the configured `defaultResourceServer`. If no default is configured, token issuance fails with `invalid_target`.
+- **With `resource` parameter:** The `aud` claim contains the identifier of the targeted resource server interface.
+- **Without `resource`, with permission scopes:** <ProductName /> uses the identifier of the configured default resource server interface. If no default is configured, token issuance fails with `invalid_target`.
 - **Without `resource` and permission scopes:** The `aud` claim contains the application's default audience (`token.accessToken.defaultAudience`), or the requesting client's `client_id` when it is unset.
 - **Serialization:** The single audience is serialized as a JSON string (for example, `"aud": "https://api.example.com/booking"`), per [RFC 7519 Section 4.1.3](https://datatracker.ietf.org/doc/html/rfc7519#section-4.1.3).
 
-Resource servers that validate tokens should require `aud` to match their own resource server identifier.
+Resource servers that validate tokens should require `aud` to match the identifier of the interface through which they are accessed.
 
 ## Refresh Tokens
 

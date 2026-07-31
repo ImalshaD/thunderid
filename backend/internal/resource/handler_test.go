@@ -111,22 +111,29 @@ func (suite *HandlerTestSuite) TestHandleResourceServerPostRequest_Success() {
 	reqBody := CreateResourceServerRequest{
 		Name:        "test-rs",
 		Description: "Test",
-		Identifier:  "test-identifier",
-		Type:        providers.ResourceServerTypeMCP,
 		OUID:        "ou-123",
+		Interface: ResourceServerInterfaceRequest{
+			Type:       providers.ResourceServerInterfaceTypeMCP,
+			Identifier: "https://localhost:8090/mcp",
+		},
 	}
 
 	suite.mockService.On("CreateResourceServer", mock.Anything,
 		mock.MatchedBy(func(rs providers.ResourceServer) bool {
-			return rs.Name == "test-rs" && rs.Type == providers.ResourceServerTypeMCP
+			return rs.Name == "test-rs" && len(rs.Interfaces) == 1 &&
+				rs.Interfaces[0].Type == providers.ResourceServerInterfaceTypeMCP &&
+				rs.Interfaces[0].Identifier == "https://localhost:8090/mcp"
 		})).Return(&providers.ResourceServer{
 		ID:          "rs-123",
 		Name:        "test-rs",
 		Description: "Test",
-		Type:        providers.ResourceServerTypeMCP,
 		OUID:        "ou-123",
+		Interfaces: []providers.ResourceServerInterface{{
+			ID:         "rsi-123",
+			Type:       providers.ResourceServerInterfaceTypeMCP,
+			Identifier: "https://localhost:8090/mcp",
+		}},
 	}, nil)
-
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest("POST", "/resource-servers", bytes.NewReader(body))
 	w := httptest.NewRecorder()
@@ -139,7 +146,9 @@ func (suite *HandlerTestSuite) TestHandleResourceServerPostRequest_Success() {
 	suite.NoError(err)
 	suite.Equal("rs-123", resp.ID)
 	suite.Equal("test-rs", resp.Name)
-	suite.Equal(providers.ResourceServerTypeMCP, resp.Type)
+	suite.Len(resp.Interfaces, 1)
+	suite.Equal(providers.ResourceServerInterfaceTypeMCP, resp.Interfaces[0].Type)
+	suite.Equal("https://localhost:8090/mcp", resp.Interfaces[0].Identifier)
 }
 
 func (suite *HandlerTestSuite) TestHandleResourceServerPostRequest_InvalidJSON() {
@@ -171,26 +180,6 @@ func (suite *HandlerTestSuite) TestHandleResourceServerGetRequest_Success() {
 	suite.Equal("rs-123", resp.ID)
 }
 
-func (suite *HandlerTestSuite) TestHandleResourceServerGetRequest_DefaultsTypeToCustom() {
-	suite.mockService.On("GetResourceServer", mock.Anything,
-		"rs-123").Return(&providers.ResourceServer{
-		ID:   "rs-123",
-		Name: "legacy-rs",
-	}, nil)
-
-	req := httptest.NewRequest("GET", "/resource-servers/rs-123", nil)
-	req.SetPathValue("id", "rs-123")
-	w := httptest.NewRecorder()
-
-	suite.handler.HandleResourceServerGetRequest(w, req)
-
-	suite.Equal(http.StatusOK, w.Code)
-	var resp ResourceServerResponse
-	err := json.Unmarshal(w.Body.Bytes(), &resp)
-	suite.NoError(err)
-	suite.Equal(providers.ResourceServerTypeCustom, resp.Type)
-}
-
 func (suite *HandlerTestSuite) TestHandleResourceServerGetRequest_NotFound() {
 	suite.mockService.On("GetResourceServer", mock.Anything,
 		"rs-123").Return(nil, &ErrorResourceServerNotFound)
@@ -206,9 +195,8 @@ func (suite *HandlerTestSuite) TestHandleResourceServerGetRequest_NotFound() {
 
 func (suite *HandlerTestSuite) TestHandleResourceServerPutRequest_Success() {
 	reqBody := UpdateResourceServerRequest{
-		Name:       "updated-rs",
-		Identifier: "test-identifier",
-		OUID:       "ou-123",
+		Name: "updated-rs",
+		OUID: "ou-123",
 	}
 
 	suite.mockService.On("UpdateResourceServer", mock.Anything,
@@ -801,11 +789,28 @@ func (suite *HandlerTestSuite) TestHandleError_NotFoundStatus() {
 	suite.Equal(http.StatusNotFound, w.Code)
 }
 
+func (suite *HandlerTestSuite) TestHandleResourceServerInterfaceGetRequest_NotFound() {
+	suite.mockService.On("GetResourceServerInterface", mock.Anything,
+		"rs-123", "rsi-missing").Return(nil, &ErrorResourceServerInterfaceNotFound)
+
+	req := httptest.NewRequest("GET", "/resource-servers/rs-123/interfaces/rsi-missing", nil)
+	req.SetPathValue("rsId", "rs-123")
+	req.SetPathValue("id", "rsi-missing")
+	w := httptest.NewRecorder()
+
+	suite.handler.HandleResourceServerInterfaceGetRequest(w, req)
+
+	suite.Equal(http.StatusNotFound, w.Code)
+}
+
 func (suite *HandlerTestSuite) TestHandleError_ConflictStatus() {
 	reqBody := CreateResourceServerRequest{
-		Name:       "test-rs",
-		Identifier: "test-identifier",
-		OUID:       "ou-123",
+		Name: "test-rs",
+		OUID: "ou-123",
+		Interface: ResourceServerInterfaceRequest{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: "https://api.example.com/orders",
+		},
 	}
 
 	suite.mockService.On("CreateResourceServer", mock.Anything,
@@ -1000,9 +1005,8 @@ func (suite *HandlerTestSuite) TestHandleResourceServerPutRequest_InvalidJSON() 
 
 func (suite *HandlerTestSuite) TestHandleResourceServerPutRequest_ServiceError() {
 	reqBody := UpdateResourceServerRequest{
-		Name:       "updated-rs",
-		Identifier: "test-identifier",
-		OUID:       "ou-123",
+		Name: "updated-rs",
+		OUID: "ou-123",
 	}
 
 	suite.mockService.On("UpdateResourceServer", mock.Anything,

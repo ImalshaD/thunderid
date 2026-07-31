@@ -95,7 +95,7 @@ func (h *clientCredentialsGrantHandler) HandleGrant(ctx context.Context, tokenRe
 
 	audiences := []string{oauthApp.ResolveDefaultAudience(tokenRequest.ClientID)}
 	if targetRS != nil {
-		audiences = []string{targetRS.Identifier}
+		audiences = []string{resourceindicators.SelectedAudience(targetRS)}
 
 		// Downscope requested scopes to permissions defined on the target resource server.
 		scopes, errResp = resourceindicators.DownscopeToResourceServer(ctx, h.resourceService, targetRS.ID, scopes)

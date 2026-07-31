@@ -218,12 +218,21 @@ type AuthorizationResponse struct {
 
 // ResourceServer represents a resource server in the system
 type ResourceServer struct {
-	ID          string  `json:"id,omitempty"`
-	Name        string  `json:"name"`
-	Description string  `json:"description,omitempty"`
-	Identifier  string  `json:"identifier,omitempty"`
-	OUID        string  `json:"ouId"`
-	Delimiter   *string `json:"delimiter,omitempty"`
+	ID          string                    `json:"id,omitempty"`
+	Name        string                    `json:"name"`
+	Description string                    `json:"description,omitempty"`
+	OUID        string                    `json:"ouId"`
+	Delimiter   *string                   `json:"delimiter,omitempty"`
+	Interface   ResourceServerInterface   `json:"interface,omitempty"`
+	Interfaces  []ResourceServerInterface `json:"interfaces,omitempty"`
+}
+
+// ResourceServerInterface represents an interface of a resource server. Its identifier is the
+// audience of access tokens issued for that interface.
+type ResourceServerInterface struct {
+	ID         string `json:"id,omitempty"`
+	Type       string `json:"type"`
+	Identifier string `json:"identifier"`
 }
 
 // Action represents an action in the resource system

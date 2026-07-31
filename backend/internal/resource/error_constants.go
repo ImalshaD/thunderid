@@ -192,7 +192,47 @@ var (
 		},
 		ErrorDescription: tidcommon.I18nMessage{
 			Key:          "error.resourceservice.identifier_conflict_description",
-			DefaultValue: "A resource server with the same identifier already exists",
+			DefaultValue: "A resource server interface with the same identifier already exists",
+		},
+	}
+	// ErrorResourceServerInterfaceNotFound is returned when the resource server interface is not found.
+	ErrorResourceServerInterfaceNotFound = tidcommon.ServiceError{
+		Type: tidcommon.ClientErrorType,
+		Code: "RES-1024",
+		Error: tidcommon.I18nMessage{
+			Key:          "error.resourceservice.resource_server_interface_not_found",
+			DefaultValue: "Resource server interface not found",
+		},
+		ErrorDescription: tidcommon.I18nMessage{
+			Key:          "error.resourceservice.resource_server_interface_not_found_description",
+			DefaultValue: "The resource server interface with the specified id does not exist",
+		},
+	}
+	// ErrorInvalidInterfaceType is returned when the interface type is not supported.
+	ErrorInvalidInterfaceType = tidcommon.ServiceError{
+		Type: tidcommon.ClientErrorType,
+		Code: "RES-1025",
+		Error: tidcommon.I18nMessage{
+			Key:          "error.resourceservice.invalid_interface_type",
+			DefaultValue: "Invalid interface type",
+		},
+		ErrorDescription: tidcommon.I18nMessage{
+			Key:          "error.resourceservice.invalid_interface_type_description",
+			DefaultValue: "The interface type must be either API or MCP",
+		},
+	}
+		// ErrorInvalidInterfaceIdentifier is returned when the interface audience identifier is
+		// empty or otherwise invalid.
+	ErrorInvalidInterfaceIdentifier = tidcommon.ServiceError{
+		Type: tidcommon.ClientErrorType,
+		Code: "RES-1026",
+		Error: tidcommon.I18nMessage{
+			Key:          "error.resourceservice.invalid_interface_identifier",
+			DefaultValue: "Invalid interface identifier",
+		},
+		ErrorDescription: tidcommon.I18nMessage{
+			Key:          "error.resourceservice.invalid_interface_identifier_description",
+			DefaultValue: "The interface identifier cannot be empty",
 		},
 	}
 	// ErrorHandleConflict is returned when a handle already exists.
@@ -321,6 +361,9 @@ var (
 	// errResourceServerNotFound is returned when the resource server is not found.
 	errResourceServerNotFound = errors.New("resource server not found")
 
+	// errResourceServerInterfaceNotFound is returned when the resource server interface is not found.
+	errResourceServerInterfaceNotFound = errors.New("resource server interface not found")
+
 	// errResourceNotFound is returned when the resource is not found.
 	errResourceNotFound = errors.New("resource not found")
 
@@ -330,13 +373,13 @@ var (
 	// errResultLimitExceededInCompositeMode is the internal sentinel error for composite mode limit exceeded.
 	errResultLimitExceededInCompositeMode = errors.New("result limit exceeded in composite mode")
 
-	// errUnknownDefaultResourceServer is returned when the configured resource server does not exist.
-	errUnknownDefaultResourceServer = errors.New(
-		"default resource server does not resolve to an existing resource server")
+	// errUnknownDefaultResourceServerInterface is returned when the configured interface does not exist.
+	errUnknownDefaultResourceServerInterface = errors.New(
+		"default resource server interface does not resolve to an existing interface")
 
 	// errDeclarativeDefaultLocked is returned when attempting to override a declarative default.
 	errDeclarativeDefaultLocked = errors.New(
-		"default resource server is set declaratively and cannot be overridden")
+		"default resource server interface is set declaratively and cannot be overridden")
 
 	// errDefaultResourceServerLookupFailed is returned when resource server lookup fails.
 	errDefaultResourceServerLookupFailed = errors.New("failed to resolve default resource server")

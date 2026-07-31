@@ -31,6 +31,18 @@ import (
 	"github.com/thunder-id/thunderid/internal/oauth/oauth2/model"
 )
 
+// SelectedAudience returns the audience an access token bound to rs must carry: the identifier of
+// the interface that selected the resource server during resolution. Identifier resolution narrows a
+// resource server to that single interface, so a resource server exposing both an API and an MCP
+// interface yields the identifier the request actually asked for rather than an arbitrary one.
+// Returns "" when rs was not resolved through an interface.
+func SelectedAudience(rs *providers.ResourceServer) string {
+	if rs == nil || len(rs.Interfaces) != 1 {
+		return ""
+	}
+	return rs.Interfaces[0].Identifier
+}
+
 // ValidateResourceURIs returns an error response when any resource URI is not absolute
 // or contains a fragment component (RFC 8707 §2, RFC 3986 §4.3).
 func ValidateResourceURIs(resources []string) *model.ErrorResponse {

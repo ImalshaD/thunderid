@@ -238,7 +238,7 @@ func (ts *SSOLogoutTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "SSO Logout Resource Server",
 		Description: "Resource server for SSO session and logout integration tests",
-		Identifier:  resourceIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: resourceIdentifier},
 		OUID:        testOUID,
 	}, []testutils.Action{})
 	ts.Require().NoError(err, "Failed to create resource server")
@@ -256,7 +256,7 @@ func (ts *SSOLogoutTestSuite) SetupSuite() {
 	rsAID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "SSO Scope Resource Server A",
 		Description: "Resource server A for the cross-RS SSO regression",
-		Identifier:  rsAIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: rsAIdentifier},
 		OUID:        testOUID,
 	}, readAction)
 	ts.Require().NoError(err, "Failed to create resource server A")
@@ -265,7 +265,7 @@ func (ts *SSOLogoutTestSuite) SetupSuite() {
 	rsBID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "SSO Scope Resource Server B",
 		Description: "Resource server B (defines the same permission strings as A)",
-		Identifier:  rsBIdentifier,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: rsBIdentifier},
 		OUID:        testOUID,
 	}, readAction)
 	ts.Require().NoError(err, "Failed to create resource server B")

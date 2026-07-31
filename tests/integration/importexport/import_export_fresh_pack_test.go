@@ -188,17 +188,19 @@ func (suite *ImportExportFreshPackSuite) getServerConfigCORS() string {
 	return string(body)
 }
 
-func (suite *ImportExportFreshPackSuite) TestDefaultResourceServerExportImportRoundTrip() {
-	const resourceServerID = "01900000-0000-7000-8000-000000000020"
+func (suite *ImportExportFreshPackSuite) TestDefaultResourceServerInterfaceExportImportRoundTrip() {
+	// The System resource server's API interface, seeded by the bootstrap defaults.
+	const resourceServerInterfaceID = "01900000-0000-7000-8000-000000000022"
 
-	suite.putServerConfigDefaultResourceServer(resourceServerID)
+	suite.putServerConfigDefaultResourceServerInterface(resourceServerInterfaceID)
 
-	exported, err := suite.exportResources(exportRequest{ServerConfigs: []string{"defaultResourceServer"}})
+	exported, err := suite.exportResources(exportRequest{ServerConfigs: []string{"defaultResourceServerInterface"}})
 	suite.Require().NoError(err)
-	suite.Require().Contains(exported, resourceServerID)
+	suite.Require().Contains(exported, resourceServerInterfaceID)
 
-	suite.putServerConfigDefaultResourceServer("")
-	suite.Require().NotContains(suite.getServerConfigDefaultResourceServer(), resourceServerID)
+	suite.putServerConfigDefaultResourceServerInterface("")
+	suite.Require().NotContains(
+		suite.getServerConfigDefaultResourceServerInterface(), resourceServerInterfaceID)
 
 	importResp, err := suite.importResources(importRequest{
 		Content: exported,
@@ -216,15 +218,18 @@ func (suite *ImportExportFreshPackSuite) TestDefaultResourceServerExportImportRo
 	suite.Require().NotNil(serverConfigResult, "import results should include a server_config item")
 	suite.Equal("success", serverConfigResult.Status)
 
-	suite.Require().Contains(suite.getServerConfigDefaultResourceServer(), resourceServerID)
+	suite.Require().Contains(
+		suite.getServerConfigDefaultResourceServerInterface(), resourceServerInterfaceID)
 
-	suite.putServerConfigDefaultResourceServer("")
+	suite.putServerConfigDefaultResourceServerInterface("")
 }
 
-func (suite *ImportExportFreshPackSuite) putServerConfigDefaultResourceServer(resourceServerID string) {
-	body := `{"resourceServerId":"` + resourceServerID + `"}`
+func (suite *ImportExportFreshPackSuite) putServerConfigDefaultResourceServerInterface(
+	resourceServerInterfaceID string,
+) {
+	body := `{"resourceServerInterfaceId":"` + resourceServerInterfaceID + `"}`
 	req, err := http.NewRequest(http.MethodPut,
-		testutils.TestServerURL+"/server-config/defaultResourceServer", bytes.NewReader([]byte(body)))
+		testutils.TestServerURL+"/server-config/defaultResourceServerInterface", bytes.NewReader([]byte(body)))
 	suite.Require().NoError(err)
 	req.Header.Set("Content-Type", "application/json")
 
@@ -234,9 +239,9 @@ func (suite *ImportExportFreshPackSuite) putServerConfigDefaultResourceServer(re
 	suite.Require().Equal(http.StatusOK, resp.StatusCode)
 }
 
-func (suite *ImportExportFreshPackSuite) getServerConfigDefaultResourceServer() string {
+func (suite *ImportExportFreshPackSuite) getServerConfigDefaultResourceServerInterface() string {
 	req, err := http.NewRequest(http.MethodGet,
-		testutils.TestServerURL+"/server-config/defaultResourceServer", nil)
+		testutils.TestServerURL+"/server-config/defaultResourceServerInterface", nil)
 	suite.Require().NoError(err)
 
 	resp, err := testutils.GetHTTPClient().Do(req)
@@ -1039,7 +1044,9 @@ func (s *GroupRoleResourceImportExportSuite) TestImportResourceServerWithNestedR
 	yamlContent := fmt.Sprintf(`resource_type: resource_server
 name: Nested Resource Server %s
 description: Resource server with nested resources
-identifier: %s
+interfaces:
+  - type: API
+    identifier: %s
 ouId: %s
 delimiter: ":"
 resources:
@@ -1114,7 +1121,9 @@ func (s *GroupRoleResourceImportExportSuite) TestImportResourceServerUpsertNeste
 		return fmt.Sprintf(`resource_type: resource_server
 %sname: Upsert Resource Server %s
 description: Resource server for upsert test
-identifier: %s
+interfaces:
+  - type: API
+    identifier: %s
 ouId: %s
 delimiter: ":"
 resources:

@@ -152,7 +152,7 @@ func (suite *AuthorizeServiceTestSuite) SetupTest() {
 	// configured default resource server via the empty identifier. Declared optional so tests that
 	// never reach flow initiation (or that exercise resource-binding specifics) are unaffected.
 	suite.mockResourceService.EXPECT().GetResourceServerByIdentifier(mock.Anything, "").
-		Return(&providers.ResourceServer{ID: "rs-default", Identifier: "https://rs-default.example.com"}, nil).Maybe()
+		Return(resolvedResourceServer("rs-default", "https://rs-default.example.com"), nil).Maybe()
 	suite.mockResourceService.EXPECT().ValidatePermissions(mock.Anything, "rs-default", mock.Anything).
 		Return([]string{}, nil).Maybe()
 }
@@ -361,7 +361,7 @@ func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_Ex
 	suite.mockValidator.On("validateInitialAuthorizationRequest", mock.Anything, mock.Anything, app).
 		Return(false, "", "")
 	suite.mockResourceService.EXPECT().GetResourceServerByIdentifier(mock.Anything, "https://api.example.com").
-		Return(&providers.ResourceServer{ID: "rs-api", Identifier: "https://api.example.com"}, nil)
+		Return(resolvedResourceServer("rs-api", "https://api.example.com"), nil)
 	suite.mockResourceService.EXPECT().ValidatePermissions(mock.Anything, "rs-api", mock.Anything).
 		Return([]string{}, nil)
 
@@ -2267,4 +2267,14 @@ func (suite *AuthorizeServiceTestSuite) TestHandleInitialAuthorizationRequest_Mu
 	assert.Nil(suite.T(), result)
 	assert.NotNil(suite.T(), authErr)
 	assert.Equal(suite.T(), oauth2const.ErrorInvalidTarget, authErr.Code)
+}
+
+func resolvedResourceServer(id, identifier string) *providers.ResourceServer {
+	return &providers.ResourceServer{
+		ID: id,
+		Interfaces: []providers.ResourceServerInterface{{
+			Type:       providers.ResourceServerInterfaceTypeAPI,
+			Identifier: identifier,
+		}},
+	}
 }

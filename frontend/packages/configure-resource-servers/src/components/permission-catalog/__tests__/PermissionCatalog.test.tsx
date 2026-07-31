@@ -55,28 +55,25 @@ const servers = [
   {
     id: 'rs-1',
     name: 'Booking API',
-    identifier: 'https://booking.example.com',
     ouId: 'ou-1',
     delimiter: ':',
-    type: 'API' as const,
+    interfaces: [{id: 'rsi-1', type: 'API' as const, identifier: 'https://booking.example.com'}],
   },
   {
     id: 'rs-2',
     name: 'Payments API',
-    identifier: 'https://payments.example.com',
     ouId: 'ou-1',
     delimiter: ':',
-    type: 'API' as const,
+    interfaces: [{id: 'rsi-1', type: 'API' as const, identifier: 'https://payments.example.com'}],
   },
 ];
 
 const dotServer = {
   id: 'rs-dot',
   name: 'Ecommerce API',
-  identifier: 'https://ecommerce.example.com',
   ouId: 'ou-1',
   delimiter: '.',
-  type: 'API' as const,
+  interfaces: [{id: 'rsi-1', type: 'API' as const, identifier: 'https://ecommerce.example.com'}],
 };
 
 const dotRootResources = [
@@ -424,10 +421,9 @@ describe('PermissionCatalog', () => {
     const emptyServer = {
       id: 'rs-empty',
       name: 'Empty API',
-      identifier: 'https://empty.example.com',
       ouId: 'ou-1',
       delimiter: ':',
-      type: 'API' as const,
+      interfaces: [{id: 'rsi-1', type: 'API' as const, identifier: 'https://empty.example.com'}],
     };
 
     vi.mocked(useGetResourceServersModule.default).mockReturnValue(
@@ -466,10 +462,9 @@ describe('PermissionCatalog', () => {
     const mcpServer = {
       id: 'rs-mcp',
       name: 'My MCP Server',
-      identifier: 'https://mcp.example.com',
       ouId: 'ou-1',
       delimiter: ':',
-      type: 'MCP' as const,
+      interfaces: [{id: 'rsi-1', type: 'MCP' as const, identifier: 'https://mcp.example.com'}],
     };
 
     const mcpTools = [
@@ -532,10 +527,9 @@ describe('PermissionCatalog', () => {
     const mcpServer = {
       id: 'rs-mcp',
       name: 'My MCP Server',
-      identifier: 'https://mcp.example.com',
       ouId: 'ou-1',
       delimiter: ':',
-      type: 'MCP' as const,
+      interfaces: [{id: 'rsi-1', type: 'MCP' as const, identifier: 'https://mcp.example.com'}],
     };
 
     const mcpTools = [

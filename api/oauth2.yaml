@@ -125,7 +125,7 @@ paths:
             Resource indicator per RFC 8707 (absolute URI, no fragment). Only one value is
             supported; requests with multiple resource values are rejected with invalid_target.
             When omitted from a permission-bearing request, the configured
-            defaultResourceServer is used. OIDC-only and scopeless requests use the
+            default resource server interface is used. OIDC-only and scopeless requests use the
             client_id audience.
         - name: acr_values
           in: query
@@ -282,13 +282,13 @@ paths:
 
         RFC 8707 resource indicators bind the request to a single resource server before user
         authorization. A valid `resource` binds the request to that resource server; when omitted from
-        a permission-bearing request the configured `defaultResourceServer` is used, and a
+        a permission-bearing request the configured default resource server interface is used, and a
         permission-bearing request with no resource and no default is rejected with `invalid_target`.
         OIDC-only requests without a resource remain valid and keep the `client_id` audience. Multiple
         `resource` values, including duplicates, are rejected with `invalid_target`. The resulting
-        access token has the bound resource server identifier as its sole `aud`, and its permissions
-        are limited to those defined by that resource server. A `resource` optionally supplied when
-        polling the token endpoint must exactly match the bound resource server.
+        access token has the bound resource server interface identifier as its sole `aud`, and its
+        permissions are limited to those defined by the owning resource server. A `resource`
+        optionally supplied when polling the token endpoint must exactly match the bound interface.
       tags:
         - Backchannel Authentication
       requestBody:
@@ -718,7 +718,7 @@ components:
           description: >-
             Resource indicator (RFC 8707). For access-token issuance, binds the issued access token
             to exactly one resource server. When omitted from a permission-bearing request, the
-            configured defaultResourceServer is used, and if neither is available the request is
+            configured default resource server interface is used, and if neither is available the request is
             rejected with invalid_target. OIDC-only and scopeless requests use the client_id audience. Optional
             for ID-JAG requests, where it is embedded in the issued ID-JAG's `resource` claim. For
             the jwt-bearer grant, when present it must be a subset of the assertion's own `resource`
@@ -1157,7 +1157,7 @@ components:
             Resource indicator per RFC 8707 (absolute URI, no fragment). Only one value is
             supported; requests with multiple resource values, including duplicates, are rejected
             with invalid_target. When omitted from a permission-bearing request, the configured
-            defaultResourceServer is used; a permission-bearing request with no resource and no
+            default resource server interface is used; a permission-bearing request with no resource and no
             default is rejected with invalid_target. OIDC-only requests use the client_id audience.
         binding_message:
           type: string

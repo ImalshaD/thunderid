@@ -209,7 +209,7 @@ func (ts *AcrIDTokenTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "ACR E2E Resource Server",
 		Description: "Resource server for ACR ID token integration tests",
-		Identifier:  acrE2EResourceServer,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: acrE2EResourceServer},
 		OUID:        ts.ouID,
 	}, []testutils.Action{})
 	ts.Require().NoError(err, "failed to create ACR E2E resource server")

@@ -30,102 +30,111 @@ import (
 	"github.com/thunder-id/thunderid/pkg/thunderidengine/providers"
 )
 
-type DefaultResourceServerConfigHandlerTestSuite struct {
+type DefaultResourceServerInterfaceConfigHandlerTestSuite struct {
 	suite.Suite
 }
 
-func TestDefaultResourceServerConfigHandlerTestSuite(t *testing.T) {
-	suite.Run(t, new(DefaultResourceServerConfigHandlerTestSuite))
+func TestDefaultResourceServerInterfaceConfigHandlerTestSuite(t *testing.T) {
+	suite.Run(t, new(DefaultResourceServerInterfaceConfigHandlerTestSuite))
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) marshal(v any) string {
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) marshal(v any) string {
 	out, err := json.Marshal(v)
 	suite.Require().NoError(err)
 	return string(out)
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) handler() *DefaultResourceServerConfigHandler {
-	return NewDefaultResourceServerConfigHandler(NewResourceServiceInterfaceMock(suite.T()))
+type defaultInterfaceConfig = DefaultResourceServerInterfaceConfig
+
+type defaultInterfaceConfigHandler = DefaultResourceServerInterfaceConfigHandler
+
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) handler() *defaultInterfaceConfigHandler {
+	return NewDefaultResourceServerInterfaceConfigHandler(NewResourceServiceInterfaceMock(suite.T()))
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestDecodeEmptyYieldsEmptyConfig() {
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestDecodeEmptyYieldsEmptyConfig() {
 	decoded, err := suite.handler().Decode(json.RawMessage(nil))
 	suite.Require().NoError(err)
-	assert.JSONEq(suite.T(), `{"resourceServerId":""}`, suite.marshal(decoded))
+	assert.JSONEq(suite.T(), `{"resourceServerInterfaceId":""}`, suite.marshal(decoded))
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestDecodeValidObject() {
-	decoded, err := suite.handler().Decode(json.RawMessage(`{"resourceServerId":"abc"}`))
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestDecodeValidObject() {
+	decoded, err := suite.handler().Decode(json.RawMessage(`{"resourceServerInterfaceId":"abc"}`))
 	suite.Require().NoError(err)
-	assert.Equal(suite.T(), DefaultResourceServerConfig{ResourceServerID: "abc"}, decoded)
+	assert.Equal(suite.T(), DefaultResourceServerInterfaceConfig{ResourceServerInterfaceID: "abc"}, decoded)
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestDecodeMalformedJSON() {
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestDecodeMalformedJSON() {
 	_, err := suite.handler().Decode(json.RawMessage(`{not json`))
 	assert.Error(suite.T(), err)
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestValidateUnsetAccepted() {
-	h := NewDefaultResourceServerConfigHandler(NewResourceServiceInterfaceMock(suite.T()))
-	assert.NoError(suite.T(), h.Validate(DefaultResourceServerConfig{}, nil, nil))
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestValidateUnsetAccepted() {
+	h := NewDefaultResourceServerInterfaceConfigHandler(NewResourceServiceInterfaceMock(suite.T()))
+	assert.NoError(suite.T(), h.Validate(defaultInterfaceConfig{}, nil, nil))
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestValidateKnownIDAccepted() {
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestValidateKnownIDAccepted() {
 	mockSvc := NewResourceServiceInterfaceMock(suite.T())
-	mockSvc.EXPECT().GetResourceServer(mock.Anything, "rs-1").Return(&providers.ResourceServer{ID: "rs-1"}, nil)
-	h := NewDefaultResourceServerConfigHandler(mockSvc)
-	assert.NoError(suite.T(), h.Validate(DefaultResourceServerConfig{ResourceServerID: "rs-1"}, nil, nil))
+	mockSvc.EXPECT().GetResourceServerInterfaceByID(mock.Anything, "rsi-1").
+		Return(&providers.ResourceServerInterface{ID: "rsi-1", ResourceServerID: "rs-1"}, nil)
+	h := NewDefaultResourceServerInterfaceConfigHandler(mockSvc)
+	assert.NoError(suite.T(), h.Validate(defaultInterfaceConfig{ResourceServerInterfaceID: "rsi-1"}, nil, nil))
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestValidateUnknownIDRejected() {
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestValidateUnknownIDRejected() {
 	mockSvc := NewResourceServiceInterfaceMock(suite.T())
-	mockSvc.EXPECT().GetResourceServer(mock.Anything, "missing").Return(nil, &ErrorResourceServerNotFound)
-	h := NewDefaultResourceServerConfigHandler(mockSvc)
-	assert.Error(suite.T(), h.Validate(DefaultResourceServerConfig{ResourceServerID: "missing"}, nil, nil))
+	mockSvc.EXPECT().GetResourceServerInterfaceByID(mock.Anything, "missing").
+		Return(nil, &ErrorResourceServerInterfaceNotFound)
+	h := NewDefaultResourceServerInterfaceConfigHandler(mockSvc)
+	assert.Error(suite.T(), h.Validate(defaultInterfaceConfig{ResourceServerInterfaceID: "missing"}, nil, nil))
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestValidateInternalErrorRejected() {
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestValidateInternalErrorRejected() {
 	mockSvc := NewResourceServiceInterfaceMock(suite.T())
-	mockSvc.EXPECT().GetResourceServer(mock.Anything, "rs-1").Return(nil, &tidcommon.InternalServerError)
-	h := NewDefaultResourceServerConfigHandler(mockSvc)
-	err := h.Validate(DefaultResourceServerConfig{ResourceServerID: "rs-1"}, nil, nil)
+	mockSvc.EXPECT().GetResourceServerInterfaceByID(mock.Anything, "rsi-1").
+		Return(nil, &tidcommon.InternalServerError)
+	h := NewDefaultResourceServerInterfaceConfigHandler(mockSvc)
+	err := h.Validate(defaultInterfaceConfig{ResourceServerInterfaceID: "rsi-1"}, nil, nil)
 	assert.ErrorIs(suite.T(), err, errDefaultResourceServerLookupFailed)
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestValidateRejectsWriteWhenDeclarativeSet() {
-	h := NewDefaultResourceServerConfigHandler(NewResourceServiceInterfaceMock(suite.T()))
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestValidateRejectsWriteWhenDeclarativeSet() {
+	h := NewDefaultResourceServerInterfaceConfigHandler(NewResourceServiceInterfaceMock(suite.T()))
 	err := h.Validate(
-		DefaultResourceServerConfig{ResourceServerID: "rs-2"},
-		DefaultResourceServerConfig{ResourceServerID: "rs-1"},
-		DefaultResourceServerConfig{},
+		defaultInterfaceConfig{ResourceServerInterfaceID: "rsi-2"},
+		defaultInterfaceConfig{ResourceServerInterfaceID: "rsi-1"},
+		defaultInterfaceConfig{},
 	)
 	assert.Error(suite.T(), err)
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestValidateRejectsClearWhenDeclarativeSet() {
-	h := NewDefaultResourceServerConfigHandler(NewResourceServiceInterfaceMock(suite.T()))
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestValidateRejectsClearWhenDeclarativeSet() {
+	h := NewDefaultResourceServerInterfaceConfigHandler(NewResourceServiceInterfaceMock(suite.T()))
 	err := h.Validate(
-		DefaultResourceServerConfig{},
-		DefaultResourceServerConfig{ResourceServerID: "rs-1"},
-		DefaultResourceServerConfig{},
+		defaultInterfaceConfig{},
+		defaultInterfaceConfig{ResourceServerInterfaceID: "rsi-1"},
+		defaultInterfaceConfig{},
 	)
 	assert.Error(suite.T(), err)
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestMergeReadOnlyWins() {
-	merged := suite.handler().
-		Merge(DefaultResourceServerConfig{ResourceServerID: "ro"}, DefaultResourceServerConfig{ResourceServerID: "w"})
-	assert.Equal(suite.T(), DefaultResourceServerConfig{ResourceServerID: "ro"}, merged)
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestMergeReadOnlyWins() {
+	merged := suite.handler().Merge(
+		defaultInterfaceConfig{ResourceServerInterfaceID: "ro"},
+		defaultInterfaceConfig{ResourceServerInterfaceID: "w"},
+	)
+	assert.Equal(suite.T(), defaultInterfaceConfig{ResourceServerInterfaceID: "ro"}, merged)
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestMergeFallsBackToWritable() {
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestMergeFallsBackToWritable() {
 	merged := suite.handler().
-		Merge(DefaultResourceServerConfig{}, DefaultResourceServerConfig{ResourceServerID: "w"})
-	assert.Equal(suite.T(), DefaultResourceServerConfig{ResourceServerID: "w"}, merged)
+		Merge(defaultInterfaceConfig{}, defaultInterfaceConfig{ResourceServerInterfaceID: "w"})
+	assert.Equal(suite.T(), defaultInterfaceConfig{ResourceServerInterfaceID: "w"}, merged)
 }
 
-func (suite *DefaultResourceServerConfigHandlerTestSuite) TestMergeBothEmpty() {
+func (suite *DefaultResourceServerInterfaceConfigHandlerTestSuite) TestMergeBothEmpty() {
 	merged := suite.handler().
-		Merge(DefaultResourceServerConfig{}, DefaultResourceServerConfig{})
-	assert.Equal(suite.T(), DefaultResourceServerConfig{}, merged)
+		Merge(defaultInterfaceConfig{}, defaultInterfaceConfig{})
+	assert.Equal(suite.T(), defaultInterfaceConfig{}, merged)
 }

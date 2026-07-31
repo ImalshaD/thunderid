@@ -41,11 +41,9 @@ import {Link, useNavigate, useParams, useSearchParams} from 'react-router';
 import useGetDefaultResourceServer from '../api/useGetDefaultResourceServer';
 import useGetResourceServer from '../api/useGetResourceServer';
 import useUpdateResourceServer from '../api/useUpdateResourceServer';
-import AdvancedTab from '../components/resource-server-detail/AdvancedTab';
+import ResourceServerInterfacesSection from '../components/resource-server-detail/ResourceServerInterfacesSection';
 import ResourceTree from '../components/resource-tree/ResourceTree';
 import ResourceServerDeleteDialog from '../components/ResourceServerDeleteDialog';
-import SetDefaultResourceServerDialog from '../components/SetDefaultResourceServerDialog';
-import {getResourceServerTypeLabel} from '../config/resource-server-types';
 import useResourceServerRoutes from '../hooks/useResourceServerRoutes';
 
 interface TabPanelProps {
@@ -67,7 +65,7 @@ function TabPanel({children = undefined, value, index}: TabPanelProps): JSX.Elem
 }
 
 const TAB_RESOURCES = 0;
-const TAB_ADVANCED = 1;
+const TAB_INTERFACES = 1;
 
 export default function ResourceServerEditPage(): JSX.Element {
   const {resourceServerId} = useParams<{resourceServerId: string}>();
@@ -82,7 +80,7 @@ export default function ResourceServerEditPage(): JSX.Element {
   const {data: defaultConfig, isLoading: isDefaultLoading, error: defaultError} = useGetDefaultResourceServer();
   const updateRs = useUpdateResourceServer();
 
-  const initialTab = searchParams.get('tab') === 'advanced' ? TAB_ADVANCED : TAB_RESOURCES;
+  const initialTab = searchParams.get('tab') === 'interfaces' ? TAB_INTERFACES : TAB_RESOURCES;
   const [activeTab, setActiveTab] = useState(initialTab);
 
   const [editedFields, setEditedFields] = useState<Partial<{name: string; description: string; identifier: string}>>(
@@ -93,20 +91,14 @@ export default function ResourceServerEditPage(): JSX.Element {
   const [tempName, setTempName] = useState('');
   const [tempDescription, setTempDescription] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [defaultDialogOpen, setDefaultDialogOpen] = useState(false);
 
   const handleTabChange = (_e: SyntheticEvent, newValue: number): void => {
     setActiveTab(newValue);
   };
 
-  const handleFieldChange = (field: 'name' | 'description' | 'identifier', value: string): void => {
+  const handleFieldChange = (field: 'name' | 'description', value: string): void => {
     if (!resourceServer) return;
-    const original =
-      field === 'name'
-        ? resourceServer.name
-        : field === 'description'
-          ? (resourceServer.description ?? '')
-          : (resourceServer.identifier ?? '');
+    const original = field === 'name' ? resourceServer.name : (resourceServer.description ?? '');
     if (value === original) {
       setEditedFields((prev) => {
         const next = {...prev};
@@ -123,13 +115,6 @@ export default function ResourceServerEditPage(): JSX.Element {
   const handleSave = (): void => {
     if (!resourceServer) return;
 
-    const nextIdentifier =
-      'identifier' in editedFields ? (editedFields.identifier ?? '').trim() : (resourceServer.identifier ?? '').trim();
-    if (!nextIdentifier) {
-      showToast(t('resourceServers:edit.identifierRequired', 'Identifier is required.'), 'error');
-      return;
-    }
-
     updateRs.mutate(
       {
         id: resourceServer.id,
@@ -141,7 +126,6 @@ export default function ResourceServerEditPage(): JSX.Element {
                 ? editedFields.description
                 : null
               : (resourceServer.description ?? null),
-          identifier: 'identifier' in editedFields ? nextIdentifier : resourceServer.identifier,
           ouId: resourceServer.ouId,
         },
       },
@@ -189,10 +173,14 @@ export default function ResourceServerEditPage(): JSX.Element {
   // Only trust the default config once it has resolved; otherwise the page would
   // briefly render "Set as default" for the actual default before the config loads.
   const isDefaultReady = !isDefaultLoading && !defaultError;
-  const isDefault = isDefaultReady && resourceServer.id === defaultConfig?.merged?.resourceServerId;
+  const defaultInterfaceId = defaultConfig?.merged?.resourceServerInterfaceId;
+  // This resource server holds the deployment default when one of its interfaces is the configured one.
+  const isDefault =
+    isDefaultReady && Boolean(defaultInterfaceId) &&
+    (resourceServer.interfaces ?? []).some((rsi) => rsi.id === defaultInterfaceId);
   // A declarative (read-only) default is locked; the backend rejects any write, so the
   // action can never succeed and must not be offered.
-  const isDefaultLocked = isDefaultReady && Boolean(defaultConfig?.readOnly?.resourceServerId);
+  const isDefaultLocked = isDefaultReady && Boolean(defaultConfig?.readOnly?.resourceServerInterfaceId);
 
   return (
     <PageContent>
@@ -263,11 +251,6 @@ export default function ResourceServerEditPage(): JSX.Element {
                 />
               </Tooltip>
             )}
-            {isDefaultReady && !isDefault && !isDefaultLocked && (
-              <Button variant="contained" size="small" onClick={() => setDefaultDialogOpen(true)}>
-                {t('resourceServers:actions.setAsDefault', 'Set as default')}
-              </Button>
-            )}
           </Stack>
         </PageTitle.Header>
         <PageTitle.SubHeader>
@@ -325,18 +308,11 @@ export default function ResourceServerEditPage(): JSX.Element {
               </>
             )}
           </Stack>
-          <Box sx={{mt: 1, display: 'flex', gap: 1, alignItems: 'center'}}>
-            <Chip
-              label={getResourceServerTypeLabel(resourceServer.type, t)}
-              size="small"
-              color="primary"
-              variant="outlined"
-              sx={{fontSize: '0.7rem'}}
-            />
-            {resourceServer.isReadOnly && (
+          {resourceServer.isReadOnly && (
+            <Box sx={{mt: 1, display: 'flex', gap: 1, alignItems: 'center'}}>
               <Chip label={t('resourceServers:edit.systemResourceServer', 'System')} size="small" color="default" />
-            )}
-          </Box>
+            </Box>
+          )}
         </PageTitle.SubHeader>
       </PageTitle>
 
@@ -346,17 +322,13 @@ export default function ResourceServerEditPage(): JSX.Element {
         aria-label={t('resourceServers:edit.tabs', 'Resource server settings')}
       >
         <Tab
-          label={
-            resourceServer.type === 'MCP'
-              ? t('resourceServers:edit.tab.capabilities', 'Capabilities')
-              : t('resourceServers:edit.tab.resources', 'Resources')
-          }
+          label={t('resourceServers:edit.tab.resources', 'Resources')}
           id="resource-server-tab-0"
           aria-controls="resource-server-tabpanel-0"
           sx={{textTransform: 'none'}}
         />
         <Tab
-          label={t('resourceServers:edit.tab.advanced', 'Advanced Settings')}
+          label={t('resourceServers:edit.tab.interfaces', 'Interfaces')}
           id="resource-server-tab-1"
           aria-controls="resource-server-tabpanel-1"
           sx={{textTransform: 'none'}}
@@ -376,33 +348,23 @@ export default function ResourceServerEditPage(): JSX.Element {
         {!resourceServer.isReadOnly && (
           <SettingsCard
             title={t('resourceServers:edit.dangerZone.title', 'Danger Zone')}
-            description={
-              resourceServer.type === 'MCP'
-                ? t('resourceServers:edit.dangerZone.descriptionMcp', 'Irreversible actions for this MCP server.')
-                : t('resourceServers:edit.dangerZone.description', 'Irreversible actions for this resource server.')
-            }
+            description={t(
+              'resourceServers:edit.dangerZone.description',
+              'Irreversible actions for this resource server.',
+            )}
             slotProps={{root: {sx: {mt: 3}}}}
           >
             <Typography variant="h6" gutterBottom color="error">
-              {resourceServer.type === 'MCP'
-                ? t('resourceServers:edit.dangerZone.deleteServer.titleMcp', 'Delete MCP server')
-                : t('resourceServers:edit.dangerZone.deleteServer.title', 'Delete resource server')}
+              {t('resourceServers:edit.dangerZone.deleteServer.title', 'Delete resource server')}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{mb: 3}}>
-              {resourceServer.type === 'MCP'
-                ? t(
-                    'resourceServers:edit.dangerZone.deleteServer.descriptionMcp',
-                    'Permanently delete this MCP server and all associated data. This action cannot be undone.',
-                  )
-                : t(
-                    'resourceServers:edit.dangerZone.deleteServer.description',
-                    'Permanently delete this resource server and all associated data. This action cannot be undone.',
-                  )}
+              {t(
+                'resourceServers:edit.dangerZone.deleteServer.description',
+                'Permanently delete this resource server and all associated data. This action cannot be undone.',
+              )}
             </Typography>
             <Button variant="contained" color="error" onClick={() => setDeleteDialogOpen(true)}>
-              {resourceServer.type === 'MCP'
-                ? t('resourceServers:edit.dangerZone.deleteServerMcp', 'Delete MCP server')
-                : t('resourceServers:edit.dangerZone.deleteServer', 'Delete resource server')}
+              {t('resourceServers:edit.dangerZone.deleteServer', 'Delete resource server')}
             </Button>
           </SettingsCard>
         )}
@@ -421,13 +383,8 @@ export default function ResourceServerEditPage(): JSX.Element {
         />
       </TabPanel>
 
-      <TabPanel value={activeTab} index={TAB_ADVANCED}>
-        <AdvancedTab
-          key={resourceServer.id}
-          resourceServer={resourceServer}
-          identifier={editedFields.identifier ?? resourceServer.identifier ?? ''}
-          onIdentifierChange={(v) => handleFieldChange('identifier', v)}
-        />
+      <TabPanel value={activeTab} index={TAB_INTERFACES}>
+        <ResourceServerInterfacesSection key={resourceServer.id} resourceServer={resourceServer} />
       </TabPanel>
 
       {hasChanges && (
@@ -443,11 +400,6 @@ export default function ResourceServerEditPage(): JSX.Element {
         />
       )}
 
-      <SetDefaultResourceServerDialog
-        open={defaultDialogOpen}
-        resourceServer={resourceServer}
-        onClose={() => setDefaultDialogOpen(false)}
-      />
     </PageContent>
   );
 }

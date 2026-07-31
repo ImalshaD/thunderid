@@ -35,16 +35,9 @@ import {type JSX, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import useCreateAction from '../../api/useCreateAction';
 import useCreateResource from '../../api/useCreateResource';
-import type {ActionKind} from '../../models/resource-server';
 import {deriveHandle} from '../../utils/deriveHandle';
 
-export type AddNodeMode =
-  | 'resource'
-  | 'sub-resource'
-  | 'server-action'
-  | 'resource-action'
-  | 'mcp-server-tool'
-  | 'mcp-server-resource';
+export type AddNodeMode = 'resource' | 'sub-resource' | 'server-action' | 'resource-action';
 
 export interface AddNodeDialogProps {
   /** Whether the dialog is open. */
@@ -66,8 +59,6 @@ export interface AddNodeDialogProps {
 }
 
 interface ModeConfig {
-  /** The action kind to send when creating an action, or undefined for resource modes. */
-  kind: ActionKind | undefined;
   /** Whether this mode creates an action (vs. a resource). */
   isAction: boolean;
   /** Whether this mode nests the new node under `parentResourceId`. */
@@ -75,12 +66,10 @@ interface ModeConfig {
 }
 
 const MODE_CONFIG: Record<AddNodeMode, ModeConfig> = {
-  resource: {kind: undefined, isAction: false, usesParentResourceId: false},
-  'sub-resource': {kind: undefined, isAction: false, usesParentResourceId: false},
-  'server-action': {kind: undefined, isAction: true, usesParentResourceId: false},
-  'resource-action': {kind: undefined, isAction: true, usesParentResourceId: true},
-  'mcp-server-tool': {kind: 'tool', isAction: true, usesParentResourceId: false},
-  'mcp-server-resource': {kind: 'resource', isAction: true, usesParentResourceId: false},
+  resource: {isAction: false, usesParentResourceId: false},
+  'sub-resource': {isAction: false, usesParentResourceId: false},
+  'server-action': {isAction: true, usesParentResourceId: false},
+  'resource-action': {isAction: true, usesParentResourceId: true},
 };
 
 export default function AddNodeDialog({
@@ -104,7 +93,6 @@ export default function AddNodeDialog({
 
   const isAction = MODE_CONFIG[mode].isAction;
   const resourceId = MODE_CONFIG[mode].usesParentResourceId ? parentResourceId : undefined;
-  const kind = MODE_CONFIG[mode].kind;
 
   const createResource = useCreateResource(resourceServerId);
   const createAction = useCreateAction(resourceServerId, resourceId);
@@ -121,12 +109,6 @@ export default function AddNodeDialog({
   };
 
   const resolveSuccessToast = (): string => {
-    if (mode === 'mcp-server-tool') {
-      return t('resourceServers:mcp.addTool.success', 'Tool added.');
-    }
-    if (mode === 'mcp-server-resource') {
-      return t('resourceServers:mcp.addResource.success', 'Resource added.');
-    }
     if (isAction) {
       return t('resourceServers:tree.addAction.success', 'Action added.');
     }
@@ -134,12 +116,6 @@ export default function AddNodeDialog({
   };
 
   const resolveErrorToast = (): string => {
-    if (mode === 'mcp-server-tool') {
-      return t('resourceServers:mcp.addTool.error', 'Failed to add tool.');
-    }
-    if (mode === 'mcp-server-resource') {
-      return t('resourceServers:mcp.addResource.error', 'Failed to add resource.');
-    }
     if (isAction) {
       return t('resourceServers:tree.addAction.error', 'Failed to add action.');
     }
@@ -147,29 +123,16 @@ export default function AddNodeDialog({
   };
 
   const resolveNamePlaceholder = (): string => {
-    if (kind === 'tool') return t('resourceServers:tree.fields.namePlaceholder.tool', 'e.g. Send message');
-    if (kind === 'resource') return t('resourceServers:tree.fields.namePlaceholder.resource', 'e.g. User profile');
     if (isAction) return t('resourceServers:tree.fields.namePlaceholder.action', 'e.g. Read');
     return t('resourceServers:tree.fields.namePlaceholder.resourceGeneric', 'e.g. Orders');
   };
 
   const resolveHandlePlaceholder = (): string => {
-    if (kind === 'tool') return t('resourceServers:tree.fields.handlePlaceholder.tool', 'e.g. send-message');
-    if (kind === 'resource') return t('resourceServers:tree.fields.handlePlaceholder.resource', 'e.g. user-profile');
     if (isAction) return t('resourceServers:tree.fields.handlePlaceholder.action', 'e.g. read');
     return t('resourceServers:tree.fields.handlePlaceholder.resourceGeneric', 'e.g. orders');
   };
 
   const resolveDescriptionPlaceholder = (): string => {
-    if (kind === 'tool') {
-      return t(
-        'resourceServers:tree.fields.descriptionPlaceholder.tool',
-        'e.g. Sends a message to the specified channel',
-      );
-    }
-    if (kind === 'resource') {
-      return t('resourceServers:tree.fields.descriptionPlaceholder.resource', 'e.g. User profile data and preferences');
-    }
     if (isAction) {
       return t('resourceServers:tree.fields.descriptionPlaceholder.action', 'e.g. Grants read access to the resource');
     }
@@ -188,7 +151,7 @@ export default function AddNodeDialog({
 
     if (isAction) {
       createAction.mutate(
-        {...baseData, kind},
+        baseData,
         {
           onSuccess: () => {
             showToast(resolveSuccessToast(), 'success');
@@ -225,8 +188,6 @@ export default function AddNodeDialog({
     'sub-resource': t('resourceServers:tree.addSubResource.title', 'Add Sub-resource'),
     'server-action': t('resourceServers:tree.addAction.title', 'Add Action'),
     'resource-action': t('resourceServers:tree.addAction.title', 'Add Action'),
-    'mcp-server-tool': t('resourceServers:mcp.addTool.title', 'Add tool permission'),
-    'mcp-server-resource': t('resourceServers:mcp.addResource.title', 'Add resource permission'),
   };
 
   const isPending = createResource.isPending || createAction.isPending;

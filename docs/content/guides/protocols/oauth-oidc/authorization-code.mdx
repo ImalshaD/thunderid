@@ -96,7 +96,7 @@ curl -X POST https://{{productSlug}}.example.com/oauth2/token \
 
 The `response_mode` parameter is optional. For `response_type=code`, <ProductName /> uses `query` by default and returns the authorization response in the callback URL query string. Explicit `response_mode=query` is also accepted. Other response modes, such as `fragment` and `form_post`, return `invalid_request`.
 
-Access tokens with permission scopes are bound to one resource server. Send `resource=https://api.example.com/...` on the authorization or token request when the client knows the target API, or configure `defaultResourceServer` for permission-bearing requests that omit `resource`. OIDC-only or scopeless requests without `resource` use the application's `token.accessToken.defaultAudience`, falling back to `client_id`.
+Access tokens with permission scopes are bound to one resource server through a selected interface. Send `resource=https://api.example.com/...` on the authorization or token request when the client knows the target interface, or configure a default resource server interface for permission-bearing requests that omit `resource`. OIDC-only or scopeless requests without `resource` use the application's `token.accessToken.defaultAudience`, falling back to `client_id`.
 
 ## Related Guides
 

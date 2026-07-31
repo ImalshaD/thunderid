@@ -25,7 +25,7 @@ import (
 )
 
 func TestDefaultResourceServerConfigNameSupported(t *testing.T) {
-	assert.Equal(t, ConfigName("defaultResourceServer"), ConfigNameDefaultResourceServer)
-	assert.True(t, ConfigNameDefaultResourceServer.IsValid())
-	assert.Contains(t, supportedConfigNames, ConfigNameDefaultResourceServer)
+	assert.Equal(t, ConfigName("defaultResourceServerInterface"), ConfigNameDefaultResourceServerInterface)
+	assert.True(t, ConfigNameDefaultResourceServerInterface.IsValid())
+	assert.Contains(t, supportedConfigNames, ConfigNameDefaultResourceServerInterface)
 }

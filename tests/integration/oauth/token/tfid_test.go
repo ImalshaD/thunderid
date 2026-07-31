@@ -169,7 +169,7 @@ func (ts *TfidTestSuite) SetupSuite() {
 	resourceServerID, err := testutils.CreateResourceServerWithActions(testutils.ResourceServer{
 		Name:        "Tfid Resource Server",
 		Description: "Resource server for tfid integration tests",
-		Identifier:  tfidTestResource,
+		Interface:   testutils.ResourceServerInterface{Type: "API", Identifier: tfidTestResource},
 		OUID:        ts.ouID,
 	}, []testutils.Action{})
 	ts.Require().NoError(err, "Failed to create tfid resource server")

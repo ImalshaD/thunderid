@@ -38,10 +38,24 @@ type resourceStoreInterface interface {
 	UpdateResourceServer(ctx context.Context, id string, rs providers.ResourceServer) error
 	DeleteResourceServer(ctx context.Context, id string) error
 	CheckResourceServerNameExists(ctx context.Context, name string) (bool, error)
-	CheckResourceServerIdentifierExists(ctx context.Context, identifier string) (bool, error)
 	GetResourceServerByIdentifier(ctx context.Context, identifier string) (providers.ResourceServer, error)
 	CheckResourceServerHasDependencies(ctx context.Context, resServerID string) (bool, error)
 	IsResourceServerDeclarative(id string) bool
+
+	// Resource Server Interface operations
+	CreateResourceServerInterface(ctx context.Context, rsi providers.ResourceServerInterface) error
+	GetResourceServerInterface(
+		ctx context.Context, interfaceID string,
+	) (providers.ResourceServerInterface, error)
+	GetResourceServerInterfaceByIdentifier(
+		ctx context.Context, identifier string,
+	) (providers.ResourceServerInterface, error)
+	ListResourceServerInterfaces(
+		ctx context.Context, resourceServerID string,
+	) ([]providers.ResourceServerInterface, error)
+	UpdateResourceServerInterface(ctx context.Context, rsi providers.ResourceServerInterface) error
+	DeleteResourceServerInterface(ctx context.Context, interfaceID string) error
+	CheckResourceServerInterfaceIdentifierExists(ctx context.Context, identifier string) (bool, error)
 
 	// Resource operations
 	CreateResource(ctx context.Context, uuid string, resServerID string, parentID *string, res providers.Resource) error
@@ -119,8 +133,6 @@ func (s *resourceStore) CreateResourceServer(ctx context.Context, id string, rs 
 			rs.OUID,
 			rs.Name,
 			rs.Description,
-			resolveNullableString(rs.Identifier),
-			resolveNullableString(string(rs.Type)),
 			buildPropertiesJSON(rs),
 			s.deploymentID,
 		)
@@ -148,7 +160,10 @@ func (s *resourceStore) GetResourceServer(ctx context.Context, id string) (provi
 		rs, err = buildResourceServerFromResultRow(results[0])
 		return err
 	})
-	return rs, err
+	if err != nil {
+		return providers.ResourceServer{}, err
+	}
+	return s.withInterfaces(ctx, rs)
 }
 
 // GetResourceServerList retrieves a list of resource servers with pagination.
@@ -177,6 +192,12 @@ func (s *resourceStore) GetResourceServerList(
 	if err != nil {
 		return nil, err
 	}
+	for i := range resourceServers {
+		resourceServers[i], err = s.withInterfaces(ctx, resourceServers[i])
+		if err != nil {
+			return nil, err
+		}
+	}
 	return resourceServers, nil
 }
 
@@ -204,8 +225,6 @@ func (s *resourceStore) UpdateResourceServer(ctx context.Context, id string, rs 
 			rs.OUID,
 			rs.Name,
 			rs.Description,
-			resolveNullableString(rs.Identifier),
-			resolveNullableString(string(rs.Type)),
 			buildPropertiesJSON(rs),
 			id,
 			s.deploymentID,
@@ -245,29 +264,16 @@ func (s *resourceStore) CheckResourceServerNameExists(ctx context.Context, name 
 	return exists, err
 }
 
-// CheckResourceServerIdentifierExists checks if a resource server identifier exists.
-func (s *resourceStore) CheckResourceServerIdentifierExists(ctx context.Context, identifier string) (bool, error) {
-	var exists bool
-	err := s.withDBClient(func(dbClient provider.DBClientInterface) error {
-		results, err := dbClient.QueryContext(ctx, queryCheckResourceServerIdentifierExists, identifier, s.deploymentID)
-		if err != nil {
-			return fmt.Errorf("failed to check resource server identifier: %w", err)
-		}
-
-		exists, err = parseBoolFromCount(results)
-		return err
-	})
-	return exists, err
-}
-
-// GetResourceServerByIdentifier retrieves a resource server by its identifier.
+// GetResourceServerByIdentifier retrieves the resource server owning the given interface identifier.
 func (s *resourceStore) GetResourceServerByIdentifier(
 	ctx context.Context,
 	identifier string,
 ) (providers.ResourceServer, error) {
 	var rs providers.ResourceServer
 	err := s.withDBClient(func(dbClient provider.DBClientInterface) error {
-		results, err := dbClient.QueryContext(ctx, queryGetResourceServerByIdentifier, identifier, s.deploymentID)
+		results, err := dbClient.QueryContext(
+			ctx, queryGetResourceServerByInterfaceIdentifier, identifier, s.deploymentID,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to get resource server by identifier: %w", err)
 		}
@@ -279,7 +285,177 @@ func (s *resourceStore) GetResourceServerByIdentifier(
 		rs, err = buildResourceServerFromResultRow(results[0])
 		return err
 	})
-	return rs, err
+	if err != nil {
+		return providers.ResourceServer{}, err
+	}
+	return s.withInterfaces(ctx, rs)
+}
+
+// CreateResourceServerInterface creates a new resource server interface.
+func (s *resourceStore) CreateResourceServerInterface(
+	ctx context.Context,
+	rsi providers.ResourceServerInterface,
+) error {
+	return s.withDBClient(func(dbClient provider.DBClientInterface) error {
+		_, err := dbClient.ExecuteContext(
+			ctx,
+			queryCreateResourceServerInterface,
+			rsi.ID,
+			rsi.ResourceServerID,
+			string(rsi.Type),
+			rsi.Identifier,
+			s.deploymentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create resource server interface: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// GetResourceServerInterface retrieves a resource server interface by ID.
+func (s *resourceStore) GetResourceServerInterface(
+	ctx context.Context,
+	interfaceID string,
+) (providers.ResourceServerInterface, error) {
+	var rsi providers.ResourceServerInterface
+	err := s.withDBClient(func(dbClient provider.DBClientInterface) error {
+		results, err := dbClient.QueryContext(
+			ctx, queryGetResourceServerInterfaceByID, interfaceID, s.deploymentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to get resource server interface: %w", err)
+		}
+
+		if len(results) == 0 {
+			return errResourceServerInterfaceNotFound
+		}
+
+		rsi, err = buildResourceServerInterfaceFromResultRow(results[0])
+		return err
+	})
+	return rsi, err
+}
+
+// GetResourceServerInterfaceByIdentifier retrieves a resource server interface by its identifier.
+func (s *resourceStore) GetResourceServerInterfaceByIdentifier(
+	ctx context.Context,
+	identifier string,
+) (providers.ResourceServerInterface, error) {
+	var rsi providers.ResourceServerInterface
+	err := s.withDBClient(func(dbClient provider.DBClientInterface) error {
+		results, err := dbClient.QueryContext(
+			ctx, queryGetResourceServerInterfaceByIdentifier, identifier, s.deploymentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to get resource server interface by identifier: %w", err)
+		}
+
+		if len(results) == 0 {
+			return errResourceServerInterfaceNotFound
+		}
+
+		rsi, err = buildResourceServerInterfaceFromResultRow(results[0])
+		return err
+	})
+	return rsi, err
+}
+
+// ListResourceServerInterfaces retrieves the interfaces of a resource server.
+func (s *resourceStore) ListResourceServerInterfaces(
+	ctx context.Context,
+	resourceServerID string,
+) ([]providers.ResourceServerInterface, error) {
+	var interfaces []providers.ResourceServerInterface
+	err := s.withDBClient(func(dbClient provider.DBClientInterface) error {
+		results, err := dbClient.QueryContext(
+			ctx, queryGetResourceServerInterfaceList, resourceServerID, s.deploymentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to list resource server interfaces: %w", err)
+		}
+
+		interfaces = make([]providers.ResourceServerInterface, 0, len(results))
+		for _, row := range results {
+			rsi, err := buildResourceServerInterfaceFromResultRow(row)
+			if err != nil {
+				return err
+			}
+			interfaces = append(interfaces, rsi)
+		}
+		return nil
+	})
+	return interfaces, err
+}
+
+// UpdateResourceServerInterface updates the type and identifier of a resource server interface.
+func (s *resourceStore) UpdateResourceServerInterface(
+	ctx context.Context,
+	rsi providers.ResourceServerInterface,
+) error {
+	return s.withDBClient(func(dbClient provider.DBClientInterface) error {
+		_, err := dbClient.ExecuteContext(
+			ctx,
+			queryUpdateResourceServerInterface,
+			string(rsi.Type),
+			rsi.Identifier,
+			rsi.ID,
+			s.deploymentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update resource server interface: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// DeleteResourceServerInterface deletes a resource server interface.
+func (s *resourceStore) DeleteResourceServerInterface(ctx context.Context, interfaceID string) error {
+	return s.withDBClient(func(dbClient provider.DBClientInterface) error {
+		_, err := dbClient.ExecuteContext(
+			ctx, queryDeleteResourceServerInterface, interfaceID, s.deploymentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to delete resource server interface: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// CheckResourceServerInterfaceIdentifierExists checks if an interface identifier exists in the deployment.
+func (s *resourceStore) CheckResourceServerInterfaceIdentifierExists(
+	ctx context.Context,
+	identifier string,
+) (bool, error) {
+	var exists bool
+	err := s.withDBClient(func(dbClient provider.DBClientInterface) error {
+		results, err := dbClient.QueryContext(
+			ctx, queryCheckResourceServerInterfaceIdentifierExists, identifier, s.deploymentID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to check resource server interface identifier: %w", err)
+		}
+
+		exists, err = parseBoolFromCount(results)
+		return err
+	})
+	return exists, err
+}
+
+// withInterfaces populates the interfaces of a resource server read from the database.
+func (s *resourceStore) withInterfaces(
+	ctx context.Context,
+	rs providers.ResourceServer,
+) (providers.ResourceServer, error) {
+	interfaces, err := s.ListResourceServerInterfaces(ctx, rs.ID)
+	if err != nil {
+		return providers.ResourceServer{}, err
+	}
+	rs.Interfaces = interfaces
+	return rs, nil
 }
 
 // CheckResourceServerHasDependencies checks if resource server has dependencies.
@@ -898,14 +1074,6 @@ func (s *resourceStore) withDBClient(fn func(provider.DBClientInterface) error) 
 	return fn(dbClient)
 }
 
-// resolveNullableString converts empty string to nil for database storage.
-func resolveNullableString(value string) interface{} {
-	if value == "" {
-		return nil
-	}
-	return value
-}
-
 // parseCountResult parses a count result from database query.
 func parseCountResult(results []map[string]interface{}) (int, error) {
 	if len(results) == 0 {
@@ -1029,17 +1197,43 @@ func buildResourceServerFromResultRow(row map[string]interface{}) (providers.Res
 		rs.Description = desc
 	}
 
-	if identifier, ok := row["identifier"].(string); ok {
-		rs.Identifier = identifier
-	}
-
-	if rsType, ok := row["type"].(string); ok {
-		rs.Type = providers.ResourceServerType(rsType)
-	}
-
 	resolveProperties(row, &rs)
 
 	return rs, nil
+}
+
+// buildResourceServerInterfaceFromResultRow builds a providers.ResourceServerInterface from a
+// database result row.
+func buildResourceServerInterfaceFromResultRow(
+	row map[string]interface{},
+) (providers.ResourceServerInterface, error) {
+	rsi := providers.ResourceServerInterface{}
+
+	if id, ok := row["id"].(string); ok {
+		rsi.ID = id
+	} else {
+		return rsi, fmt.Errorf("id field is missing or invalid")
+	}
+
+	if resourceServerID, ok := row["resource_server_id"].(string); ok {
+		rsi.ResourceServerID = resourceServerID
+	} else {
+		return rsi, fmt.Errorf("resource_server_id field is missing or invalid")
+	}
+
+	if rsiType, ok := row["type"].(string); ok {
+		rsi.Type = providers.ResourceServerInterfaceType(rsiType)
+	} else {
+		return rsi, fmt.Errorf("type field is missing or invalid")
+	}
+
+	if identifier, ok := row["identifier"].(string); ok {
+		rsi.Identifier = identifier
+	} else {
+		return rsi, fmt.Errorf("identifier field is missing or invalid")
+	}
+
+	return rsi, nil
 }
 
 // buildResourceFromResultRow builds a providers.Resource from a database result row.

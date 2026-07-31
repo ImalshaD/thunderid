@@ -96,7 +96,7 @@ func (suite *CIBAGrantHandlerTestSuite) boundAuthenticatedRecord(scopes string) 
 // expectResourceServer stubs the stored-resource resolution for a bound record, with all permissions valid.
 func (suite *CIBAGrantHandlerTestSuite) expectResourceServer() {
 	suite.mockResource.EXPECT().GetResourceServerByIdentifier(mock.Anything, testCIBAResourceURL).
-		Return(&providers.ResourceServer{ID: "rs-1", Identifier: testCIBAResourceURL}, nil)
+		Return(resolvedResourceServer("rs-1", testCIBAResourceURL), nil)
 	suite.mockResource.EXPECT().ValidatePermissions(mock.Anything, "rs-1", mock.Anything).
 		Return([]string{}, nil)
 }
@@ -445,7 +445,7 @@ func (suite *CIBAGrantHandlerTestSuite) TestHandleGrant_PermissionScopesOutsideR
 	record := suite.boundAuthenticatedRecord("read write")
 	suite.mockCIBAService.EXPECT().GetByAuthReqID(mock.Anything, "auth-req-1").Return(record, nil)
 	suite.mockResource.EXPECT().GetResourceServerByIdentifier(mock.Anything, testCIBAResourceURL).
-		Return(&providers.ResourceServer{ID: "rs-1", Identifier: testCIBAResourceURL}, nil)
+		Return(resolvedResourceServer("rs-1", testCIBAResourceURL), nil)
 	suite.mockResource.EXPECT().ValidatePermissions(mock.Anything, "rs-1", mock.Anything).
 		Return([]string{"write"}, nil)
 	var capturedCtx *tokenservice.AccessTokenBuildContext

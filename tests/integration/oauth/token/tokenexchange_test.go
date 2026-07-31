@@ -101,9 +101,9 @@ func (ts *TokenExchangeTestSuite) SetupSuite() {
 
 	// Create resource server for resource parameter tests
 	rs := testutils.ResourceServer{
-		Name:       "Token Exchange Test RS",
-		Identifier: "https://resource.example.com",
-		OUID:       ts.oUID,
+		Name:      "Token Exchange Test RS",
+		Interface: testutils.ResourceServerInterface{Type: "API", Identifier: "https://resource.example.com"},
+		OUID:      ts.oUID,
 	}
 	rsID, err := testutils.CreateResourceServerWithActions(rs, []testutils.Action{})
 	ts.Require().NoError(err, "Failed to create test resource server")

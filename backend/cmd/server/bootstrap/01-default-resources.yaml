@@ -96,8 +96,14 @@ resource_type: resource_server
 id: 01900000-0000-7000-8000-000000000020
 name: System
 description: System resource server
-identifier: https://localhost:8090/mcp
 ouHandle: default
+interfaces:
+  - id: 01900000-0000-7000-8000-000000000022
+    type: API
+    identifier: https://localhost:8090
+  - id: 01900000-0000-7000-8000-000000000021
+    type: MCP
+    identifier: https://localhost:8090/mcp
 resources:
   - name: System
     handle: system
