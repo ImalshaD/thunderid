@@ -343,11 +343,6 @@ jobs:
           fetch-depth: 0
           ref: ${{ env.RELEASE_BRANCH }}
 
-      - name: 🏷️ Update Product Version
-        run: |
-          VERSION="${{ needs.build.outputs.version }}"
-          echo "$VERSION" > version.txt
-
       - name: ⚙️ Set up Go Environment
         uses: ./.github/actions/setup-go
 
@@ -382,6 +377,37 @@ jobs:
 
       - name: 🔨 Build Release Artifacts
         uses: ./.github/actions/build-multiplatform
+
+      - name: 🏷️ Name Distributions After the Release Version
+        run: |
+          # The product is built from version.txt so a release candidate stays identical to
+          # its GA build; only the distribution file name carries the release version.
+          RELEASE_VERSION="${{ needs.build.outputs.version }}"
+          RELEASE_VERSION="${RELEASE_VERSION#v}"
+          BUILT_VERSION=$(tr -d '[:space:]' < version.txt)
+          BUILT_VERSION="${BUILT_VERSION#v}"
+
+          if [ "$BUILT_VERSION" == "$RELEASE_VERSION" ]; then
+            echo "✅ Distributions already carry the release version $RELEASE_VERSION"
+            exit 0
+          fi
+
+          echo "📦 Renaming distributions from $BUILT_VERSION to $RELEASE_VERSION"
+          RENAMED=0
+          for zip in target/dist/${PRODUCT_NAME_LOWER}-${BUILT_VERSION}-*.zip; do
+            [ -e "$zip" ] || continue
+            SUFFIX="${zip#target/dist/${PRODUCT_NAME_LOWER}-${BUILT_VERSION}-}"
+            mv "$zip" "target/dist/${PRODUCT_NAME_LOWER}-${RELEASE_VERSION}-${SUFFIX}"
+            echo "  ${PRODUCT_NAME_LOWER}-${BUILT_VERSION}-${SUFFIX} -> ${PRODUCT_NAME_LOWER}-${RELEASE_VERSION}-${SUFFIX}"
+            RENAMED=$((RENAMED + 1))
+          done
+
+          if [ "$RENAMED" -eq 0 ]; then
+            echo "❌ Error: no distributions matched ${PRODUCT_NAME_LOWER}-${BUILT_VERSION}-*.zip"
+            ls -l target/dist/
+            exit 1
+          fi
+          echo "✅ Renamed $RENAMED distribution(s) to $RELEASE_VERSION"
 
       - name: 📝 Read Updated Version
         id: version
