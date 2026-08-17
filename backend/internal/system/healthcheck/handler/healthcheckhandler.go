@@ -41,8 +41,9 @@ func (hch *HealthCheckHandler) HandleReadinessRequest(w http.ResponseWriter, r *
 
 	statusCode := http.StatusOK
 	if serverstatus.Status != model.StatusUp {
-		logger.Error(ctx, "Readiness check failed",
-			log.String("serverstatus", string(serverstatus.Status)))
+		logger.Error(ctx, "Readiness check failed for the server",
+			log.String("serverstatus", string(serverstatus.Status)),
+			log.String("probe", "readiness"))
 		statusCode = http.StatusServiceUnavailable
 	} else {
 		logger.Debug(ctx, "Readiness check passed",
