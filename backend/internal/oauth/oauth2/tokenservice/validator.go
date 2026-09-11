@@ -684,24 +684,30 @@ func (tv *tokenValidator) ensureNotRevoked(ctx context.Context,
 
 // revocationIdentity extracts the trusted token attributes used by criteria enforcement.
 //
-// Only the dimensions a writer actually records are enforced here: the token family and the subject.
-// The remaining criterion types the revocation service accepts have no writer yet, and adding them
-// speculatively would widen the deny-list query on every token validation for rows that cannot
-// exist. Extend this alongside the write path, not ahead of it, and keep it in step with the
-// Resource Server cache so both enforcement points cover the same dimensions.
+// Only the dimensions a writer actually records are enforced here: the token family, the subject, and
+// the OAuth client the artifact was issued to. The remaining criterion types the revocation service
+// accepts have no writer yet, and adding them speculatively would widen the deny-list query on every
+// token validation for rows that cannot exist. Extend this alongside the write path, not ahead of it,
+// and keep it in step with the Resource Server cache so both enforcement points cover the same
+// dimensions.
 func revocationIdentity(claims map[string]interface{}, jti, tokenFamilyID string) revocation.RevocationIdentity {
-	criteria := make([]revocation.Criterion, 0, 2)
+	criteria := make([]revocation.Criterion, 0, 3)
 	if tokenFamilyID != "" {
 		criteria = append(criteria,
 			revocation.Criterion{Type: revocation.CriterionTypeTokenFamily, Value: tokenFamilyID})
 	}
 	subject, _ := extractStringClaim(claims, constants.ClaimSub)
-	if accessTokenSubject, _ := extractStringClaim(
-		claims, constants.ClaimAccessTokenSubject); accessTokenSubject != "" {
+	accessTokenSubject, _ := extractStringClaim(claims, constants.ClaimAccessTokenSubject)
+	isRefreshToken := accessTokenSubject != ""
+	if isRefreshToken {
 		subject = accessTokenSubject
 	}
 	if subject != "" {
 		criteria = append(criteria, revocation.Criterion{Type: revocation.CriterionTypeSubject, Value: subject})
+	}
+	if clientKey := revocationClientKey(claims, isRefreshToken); clientKey != "" {
+		criteria = append(criteria,
+			revocation.Criterion{Type: revocation.CriterionTypeApplicationKey, Value: clientKey})
 	}
 
 	var establishedAt time.Time
@@ -709,4 +715,18 @@ func revocationIdentity(claims map[string]interface{}, jti, tokenFamilyID string
 		establishedAt = time.Unix(int64(issuedAt), 0).UTC()
 	}
 	return revocation.RevocationIdentity{JTI: jti, EstablishedAt: establishedAt, Criteria: criteria}
+}
+
+// revocationClientKey returns the OAuth client the artifact was issued to, the value the app.key
+// dimension is revoked by. Access tokens carry it in client_id; refresh tokens carry none and are minted
+// with the client as sub, so sub is read only there, where it is not the end user.
+func revocationClientKey(claims map[string]interface{}, isRefreshToken bool) string {
+	if clientID, _ := extractStringClaim(claims, constants.ClaimClientID); clientID != "" {
+		return clientID
+	}
+	if isRefreshToken {
+		clientKey, _ := extractStringClaim(claims, constants.ClaimSub)
+		return clientKey
+	}
+	return ""
 }
