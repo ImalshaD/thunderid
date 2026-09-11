@@ -658,6 +658,30 @@ const sidebars: SidebarsConfig = {
                 {type: 'doc', id: 'guides/integrations/apim-gateways/krakend', label: 'KrakenD'},
               ],
             },
+            {
+              type: 'category',
+              label: 'Workload Identity Federation',
+              collapsed: true,
+              collapsible: true,
+              items: [
+                {
+                  type: 'doc',
+                  id: 'guides/integrations/workload-identity-federation/overview',
+                  label: 'Overview',
+                  key: 'wif-overview',
+                },
+                {
+                  type: 'doc',
+                  id: 'guides/integrations/workload-identity-federation/openai',
+                  label: 'OpenAI',
+                },
+                {
+                  type: 'doc',
+                  id: 'guides/integrations/workload-identity-federation/claude',
+                  label: 'Claude',
+                },
+              ],
+            },
           ],
         },
         {
