@@ -9,7 +9,11 @@ import {setCnPrefix} from '@thunderid/utils';
 import {StrictMode} from 'react';
 import * as ReactDOM from 'react-dom/client';
 import AppWithDecorators from './AppWithDecorators';
+import installSessionDataCallbackShim from './sessionDataCallbackShim';
 import './index.css';
+
+// TEMPORARY demo shim, not for the PR: stands in for the SDK posting sessionData on the callback.
+installSessionDataCallbackShim();
 
 // Initialize the class name prefix from runtime config (e.g., "<PRODUCT_NAME>" -> "<PRODUCT_NAME>SignIn--root")
 if (typeof window !== 'undefined') {
